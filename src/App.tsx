@@ -23,7 +23,6 @@ import {
   ArrowRight,
   ArrowUp
 } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
@@ -241,24 +240,42 @@ export default function App() {
     if (isExpanding) {
       next.add(id);
       if (rootNode) {
-        const findAndFetch = async (node: FileNode): Promise<FileNode> => {
-          if (node.id === id) {
-            const fresh = await fetchDirectory(id);
-            return fresh || node;
+        const findAndFetch = async (node: FileNode, shouldExpandAll: boolean): Promise<FileNode> => {
+          if (node.id === id || shouldExpandAll) {
+            const fresh = await fetchDirectory(node.id);
+            if (fresh) {
+              next.add(node.id);
+              if (recursive && fresh.children) {
+                fresh.children = await Promise.all(
+                  fresh.children
+                    .filter(c => c.type === 'folder')
+                    .map(c => findAndFetch(c, true))
+                );
+              }
+              return fresh;
+            }
+            return node;
           }
           if (node.children) {
             return {
               ...node,
-              children: await Promise.all(node.children.map(findAndFetch))
+              children: await Promise.all(node.children.map(c => findAndFetch(c, false)))
             };
           }
           return node;
         };
-        const newRoot = await findAndFetch(rootNode);
+        const newRoot = await findAndFetch(rootNode, false);
         setRootNode(newRoot);
       }
     } else {
-      next.delete(id);
+      if (recursive) {
+        // Simple recursive collapse: remove all IDs that start with this path
+        // (This assumes IDs are full paths)
+        const toRemove = Array.from(next).filter((expandedId: string) => expandedId.startsWith(id));
+        toRemove.forEach(expandedId => next.delete(expandedId));
+      } else {
+        next.delete(id);
+      }
     }
     setExpandedIds(next);
   };
@@ -464,10 +481,13 @@ export default function App() {
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Sidebar Tree */}
-        <aside className="w-72 border-r flex flex-col bg-muted/5">
-          <ScrollArea className="flex-1" onMouseDown={handleMiddleMouseDown}>
+        <aside className="w-72 border-r flex flex-col bg-muted/5 min-h-0">
+          <div 
+            className="flex-1 overflow-y-auto custom-scrollbar" 
+            onMouseDown={handleMiddleMouseDown}
+          >
             <div className="p-2">
               <TreeItem
                 node={rootNode}
@@ -480,11 +500,11 @@ export default function App() {
                 searchQuery={searchQuery}
               />
             </div>
-          </ScrollArea>
+          </div>
         </aside>
 
         {/* Main Content Area / Preview */}
-        <main className="flex-1 overflow-hidden bg-card/30">
+        <main className="flex-1 overflow-hidden bg-card/30 min-h-0">
           <AnimatePresence mode="wait">
             {selectedNode ? (
               <motion.div
@@ -495,7 +515,10 @@ export default function App() {
                 transition={{ duration: 0.2 }}
                 className="h-full flex flex-col"
               >
-                <ScrollArea className="flex-1" onMouseDown={handleMiddleMouseDown}>
+                <div 
+                  className="flex-1 overflow-y-auto custom-scrollbar" 
+                  onMouseDown={handleMiddleMouseDown}
+                >
                   <div className="max-w-4xl mx-auto p-8">
                     {selectedNode.type === 'folder' ? (
                       <div className="space-y-6">
@@ -592,7 +615,7 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                </ScrollArea>
+                </div>
               </motion.div>
             ) : (
               <motion.div
@@ -601,7 +624,10 @@ export default function App() {
                 animate={{ opacity: 1 }}
                 className="h-full flex flex-col"
               >
-                <ScrollArea className="flex-1" onMouseDown={handleMiddleMouseDown}>
+                <div 
+                  className="flex-1 overflow-y-auto custom-scrollbar" 
+                  onMouseDown={handleMiddleMouseDown}
+                >
                   <div className="max-w-4xl mx-auto p-8">
                     <div className="space-y-6">
                       <div className="flex items-center gap-4">
@@ -632,7 +658,7 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-                </ScrollArea>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
