@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
 let serverProcess;
@@ -16,10 +17,21 @@ function createWindow() {
     title: "Local File Explorer"
   });
 
+  // Check for updates
+  autoUpdater.checkForUpdatesAndNotify();
+
   // Start the backend server
-  serverProcess = spawn('node', [path.join(__dirname, 'server.ts')], {
-    env: { ...process.env, NODE_ENV: 'production' },
-    shell: true
+  const isDev = !app.isPackaged;
+  const serverPath = path.join(__dirname, isDev ? 'server.ts' : 'server.ts');
+  
+  // Use tsx for .ts files, or node if it was compiled (but we are shipping .ts)
+  const command = isDev ? 'npx' : 'npx';
+  const args = isDev ? ['tsx', 'server.ts'] : ['tsx', 'server.ts'];
+
+  serverProcess = spawn(command, args, {
+    env: { ...process.env, NODE_ENV: isDev ? 'development' : 'production' },
+    shell: true,
+    cwd: __dirname
   });
 
   serverProcess.stdout.on('data', (data) => {
