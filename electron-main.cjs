@@ -20,23 +20,31 @@ function createWindow() {
   // Check for updates
   autoUpdater.checkForUpdatesAndNotify();
 
+  // Open DevTools for debugging
+  mainWindow.webContents.openDevTools();
+
   // Start the backend server
   const isDev = !app.isPackaged;
-  const serverPath = path.join(__dirname, isDev ? 'server.ts' : 'server.ts');
   
-  // Use tsx for .ts files, or node if it was compiled (but we are shipping .ts)
-  const command = isDev ? 'npx' : 'npx';
-  const args = isDev ? ['tsx', 'server.ts'] : ['tsx', 'server.ts'];
+  // Use npx tsx to run the server
+  const command = 'npx';
+  const args = ['tsx', 'server.ts'];
+
+  console.log(`Starting server with: ${command} ${args.join(' ')}`);
 
   serverProcess = spawn(command, args, {
-    env: { ...process.env, NODE_ENV: isDev ? 'development' : 'production' },
+    env: { ...process.env, NODE_ENV: isDev ? 'development' : 'production', PORT: '3000' },
     shell: true,
-    cwd: __dirname
+    cwd: app.getAppPath()
   });
 
+  let serverStarted = false;
+
   serverProcess.stdout.on('data', (data) => {
-    console.log(`Server: ${data}`);
-    if (data.toString().includes('Server running')) {
+    const output = data.toString();
+    console.log(`Server: ${output}`);
+    if (output.includes('Server running') && !serverStarted) {
+      serverStarted = true;
       mainWindow.loadURL('http://localhost:3000');
     }
   });
@@ -44,6 +52,16 @@ function createWindow() {
   serverProcess.stderr.on('data', (data) => {
     console.error(`Server Error: ${data}`);
   });
+
+  // Fallback: if server doesn't report "running" within 10 seconds, try loading anyway
+  setTimeout(() => {
+    if (!serverStarted) {
+      console.log("Fallback: Attempting to load URL after timeout...");
+      mainWindow.loadURL('http://localhost:3000').catch(err => {
+        console.error("Failed to load URL in fallback:", err);
+      });
+    }
+  }, 10000);
 
   mainWindow.on('closed', function () {
     mainWindow = null;
