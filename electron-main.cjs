@@ -17,7 +17,39 @@ function createWindow() {
     title: "Local File Explorer"
   });
 
-  // Check for updates
+  // Create Menu
+  const { Menu } = require('electron');
+  const menu = Menu.buildFromTemplate([
+    {
+      label: 'File',
+      submenu: [{ role: 'quit' }]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+      ]
+    },
+    {
+      label: 'Updates',
+      submenu: [
+        {
+          label: 'Check for Updates...',
+          click: () => {
+            autoUpdater.checkForUpdatesAndNotify();
+          }
+        }
+      ]
+    }
+  ]);
+  Menu.setApplicationMenu(menu);
+
+  // Check for updates automatically on start
   autoUpdater.checkForUpdatesAndNotify();
 
   // Open DevTools for debugging
@@ -26,15 +58,24 @@ function createWindow() {
   // Start the backend server
   const isDev = !app.isPackaged;
   
-  // Use npx tsx to run the server
-  const command = 'npx';
-  const args = ['tsx', 'server.ts'];
+  // Directly use the Electron executable as node
+  const command = process.execPath;
+  const args = [
+    path.join(app.getAppPath(), 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+    path.join(app.getAppPath(), 'server.ts')
+  ];
 
-  console.log(`Starting server with: ${command} ${args.join(' ')}`);
+  console.log(`Starting server...`);
+  console.log(`App Path: ${app.getAppPath()}`);
 
   serverProcess = spawn(command, args, {
-    env: { ...process.env, NODE_ENV: isDev ? 'development' : 'production', PORT: '3000' },
-    shell: true,
+    env: { 
+      ...process.env, 
+      NODE_ENV: isDev ? 'development' : 'production', 
+      PORT: '3000',
+      ELECTRON_RUN_AS_NODE: '1' // Make electron act like node
+    },
+    shell: false,
     cwd: app.getAppPath()
   });
 
