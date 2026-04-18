@@ -166,6 +166,7 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
   const [bookmarks, setBookmarks] = useState<FileNode[]>([]);
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
   
   // Context Menu state
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, node: FileNode | null } | null>(null);
@@ -223,6 +224,16 @@ export default function App() {
     };
     const handleClickOutside = () => setContextMenu(null);
 
+    // Persistence for bookmarks
+    const saved = localStorage.getItem('explorer-bookmarks');
+    if (saved) {
+      try {
+        setBookmarks(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to load bookmarks', e);
+      }
+    }
+
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('click', handleClickOutside);
@@ -235,6 +246,10 @@ export default function App() {
       window.removeEventListener('contextmenu', handleClickOutside);
     };
   }, [autoScroll.active, autoScroll.y, isResizing]);
+
+  useEffect(() => {
+    localStorage.setItem('explorer-bookmarks', JSON.stringify(bookmarks));
+  }, [bookmarks]);
 
   // Fetch directory structure
   const fetchDirectory = async (path?: string): Promise<FileNode | null> => {
@@ -315,7 +330,6 @@ export default function App() {
 
     if (range && lastSelectedId) {
       // Get all visible nodes in the current view (main area)
-      const currentViewNodes = (selectedNode?.type === 'folder' ? selectedNode.children : rootNode?.children) || [];
       if (currentViewNodes.length > 0) {
         const currentIndex = currentViewNodes.findIndex(n => n.id === node.id);
         const lastIndex = currentViewNodes.findIndex(n => n.id === lastSelectedId);
@@ -541,6 +555,66 @@ export default function App() {
     setContextMenu(null);
   };
 
+  const handleCreateFolder = async (parentPath: string) => {
+    try {
+      const res = await fetch('/api/new-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentPath })
+      });
+      if (res.ok) {
+        // Refresh view
+        if (rootNode) {
+          const fresh = await fetchDirectory(rootNode.id);
+          if (fresh) setRootNode(fresh);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setContextMenu(null);
+  };
+
+  const parseSize = (sizeStr: string) => {
+    const units: Record<string, number> = { 'B': 1, 'KB': 1024, 'MB': 1024 ** 2, 'GB': 1024 ** 3, 'TB': 1024 ** 4 };
+    const match = sizeStr.match(/^([\d.]+)\s*([a-zA-Z]+)$/);
+    if (!match) return 0;
+    const value = parseFloat(match[1]);
+    const unit = match[2].toUpperCase();
+    return value * (units[unit] || 1);
+  };
+
+  const getSortedChildren = (children: FileNode[] | undefined) => {
+    if (!children) return [];
+    return [...children].sort((a, b) => {
+      // Folders always first for Name/Type sorting
+      if (sortConfig.key === 'name' || sortConfig.key === 'type') {
+        if (a.type === 'folder' && b.type !== 'folder') return -1;
+        if (a.type !== 'folder' && b.type === 'folder') return 1;
+      }
+
+      let valA: any = a[sortConfig.key as keyof FileNode] || '';
+      let valB: any = b[sortConfig.key as keyof FileNode] || '';
+
+      if (sortConfig.key === 'size') {
+        valA = parseSize(a.size || '0');
+        valB = parseSize(b.size || '0');
+      } else if (typeof valA === 'string') {
+        valA = valA.toLowerCase();
+        valB = valB.toLowerCase();
+      }
+
+      if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
+  const currentViewNodes = useMemo(() => {
+    const node = selectedNode && selectedNode.type === 'folder' ? selectedNode : (rootNode || undefined);
+    return getSortedChildren(node?.children);
+  }, [selectedNode, rootNode, sortConfig]);
+
   if (loading && !rootNode) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-background">
@@ -602,6 +676,33 @@ export default function App() {
                 ))}
               </div>
             )}
+          </div>
+          <div className="flex items-center gap-1 ml-4 border-l pl-4 hidden md:flex">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase mr-2">Sort:</span>
+            <Button
+              variant={sortConfig.key === 'name' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 text-[10px] px-2"
+              onClick={() => setSortConfig(s => ({ key: 'name', direction: s.key === 'name' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+            >
+              Name {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+            </Button>
+            <Button
+              variant={sortConfig.key === 'modifiedAt' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 text-[10px] px-2"
+              onClick={() => setSortConfig(s => ({ key: 'modifiedAt', direction: s.key === 'modifiedAt' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+            >
+              Date {sortConfig.key === 'modifiedAt' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+            </Button>
+            <Button
+              variant={sortConfig.key === 'size' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 text-[10px] px-2"
+              onClick={() => setSortConfig(s => ({ key: 'size', direction: s.key === 'size' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+            >
+              Size {sortConfig.key === 'size' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+            </Button>
           </div>
         </div>
 
@@ -732,7 +833,7 @@ export default function App() {
                         
                         {viewMode === 'grid' ? (
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                            {selectedNode.children?.map(child => (
+                            {currentViewNodes.map(child => (
                               <button
                                 key={child.id}
                                 onClick={(e) => handleSelect(child, e.ctrlKey || e.metaKey, e.shiftKey)}
@@ -755,13 +856,33 @@ export default function App() {
                           </div>
                         ) : (
                           <div className="space-y-1">
-                            <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest border-b mb-2">
-                              <div className="col-span-6">Name</div>
-                              <div className="col-span-3">Date Modified</div>
-                              <div className="col-span-2 text-right">Size</div>
-                              <div className="col-span-1"></div>
+                            <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest border-b mb-2 select-none">
+                              <div 
+                                className="col-span-6 cursor-pointer hover:text-foreground flex items-center gap-1"
+                                onClick={() => setSortConfig(s => ({ key: 'name', direction: s.key === 'name' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+                              >
+                                Name {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                              </div>
+                              <div 
+                                className="col-span-3 cursor-pointer hover:text-foreground flex items-center gap-1"
+                                onClick={() => setSortConfig(s => ({ key: 'modifiedAt', direction: s.key === 'modifiedAt' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+                              >
+                                Date Modified {sortConfig.key === 'modifiedAt' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                              </div>
+                              <div 
+                                className="col-span-2 text-right cursor-pointer hover:text-foreground flex items-center gap-1 justify-end"
+                                onClick={() => setSortConfig(s => ({ key: 'size', direction: s.key === 'size' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+                              >
+                                Size {sortConfig.key === 'size' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                              </div>
+                              <div 
+                                className="col-span-1 cursor-pointer hover:text-foreground text-center"
+                                onClick={() => setSortConfig(s => ({ key: 'type', direction: s.key === 'type' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+                              >
+                                {sortConfig.key === 'type' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                              </div>
                             </div>
-                            {selectedNode.children?.map(child => (
+                            {currentViewNodes.map(child => (
                               <button
                                 key={child.id}
                                 onClick={(e) => handleSelect(child, e.ctrlKey || e.metaKey, e.shiftKey)}
@@ -776,16 +897,14 @@ export default function App() {
                                   <FileIcon type={child.type} className="h-4 w-4 shrink-0" />
                                   <span className="truncate">{child.name}</span>
                                 </div>
-                                <div className="col-span-3 text-xs text-muted-foreground truncate">
+                                <div className="col-span-3 text-xs text-muted-foreground truncate font-mono">
                                   {child.modifiedAt}
                                 </div>
-                                <div className="col-span-2 text-xs text-muted-foreground text-right tabular-nums">
+                                <div className="col-span-2 text-xs text-muted-foreground text-right tabular-nums font-mono">
                                   {child.size || '--'}
                                 </div>
                                 <div className="col-span-1 flex justify-end opacity-0 group-hover:opacity-100">
-                                  <Button variant="ghost" size="icon" className="h-6 w-6">
-                                    <MoreVertical className="h-3 w-3" />
-                                  </Button>
+                                  <Badge variant="outline" className="text-[9px] uppercase tracking-tighter h-4 px-1">{child.type}</Badge>
                                 </div>
                               </button>
                             ))}
@@ -891,7 +1010,7 @@ export default function App() {
                         
                         {viewMode === 'grid' ? (
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                            {rootNode.children?.map(child => (
+                            {currentViewNodes.map(child => (
                               <button
                                 key={child.id}
                                 onClick={(e) => handleSelect(child, e.ctrlKey || e.metaKey, e.shiftKey)}
@@ -914,13 +1033,33 @@ export default function App() {
                           </div>
                         ) : (
                           <div className="space-y-1">
-                            <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest border-b mb-2">
-                              <div className="col-span-6">Name</div>
-                              <div className="col-span-3">Date Modified</div>
-                              <div className="col-span-2 text-right">Size</div>
-                              <div className="col-span-1"></div>
+                            <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest border-b mb-2 select-none">
+                              <div 
+                                className="col-span-6 cursor-pointer hover:text-foreground flex items-center gap-1"
+                                onClick={() => setSortConfig(s => ({ key: 'name', direction: s.key === 'name' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+                              >
+                                Name {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                              </div>
+                              <div 
+                                className="col-span-3 cursor-pointer hover:text-foreground flex items-center gap-1"
+                                onClick={() => setSortConfig(s => ({ key: 'modifiedAt', direction: s.key === 'modifiedAt' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+                              >
+                                Date Modified {sortConfig.key === 'modifiedAt' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                              </div>
+                              <div 
+                                className="col-span-2 text-right cursor-pointer hover:text-foreground flex items-center gap-1 justify-end"
+                                onClick={() => setSortConfig(s => ({ key: 'size', direction: s.key === 'size' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+                              >
+                                Size {sortConfig.key === 'size' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                              </div>
+                              <div 
+                                className="col-span-1 cursor-pointer hover:text-foreground text-center"
+                                onClick={() => setSortConfig(s => ({ key: 'type', direction: s.key === 'type' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+                              >
+                                {sortConfig.key === 'type' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                              </div>
                             </div>
-                            {rootNode.children?.map(child => (
+                            {currentViewNodes.map(child => (
                               <button
                                 key={child.id}
                                 onClick={(e) => handleSelect(child, e.ctrlKey || e.metaKey, e.shiftKey)}
@@ -935,16 +1074,14 @@ export default function App() {
                                   <FileIcon type={child.type} className="h-4 w-4 shrink-0" />
                                   <span className="truncate">{child.name}</span>
                                 </div>
-                                <div className="col-span-3 text-xs text-muted-foreground truncate">
+                                <div className="col-span-3 text-xs text-muted-foreground truncate font-mono">
                                   {child.modifiedAt}
                                 </div>
-                                <div className="col-span-2 text-xs text-muted-foreground text-right tabular-nums">
+                                <div className="col-span-2 text-xs text-muted-foreground text-right tabular-nums font-mono">
                                   {child.size || '--'}
                                 </div>
                                 <div className="col-span-1 flex justify-end opacity-0 group-hover:opacity-100">
-                                  <Button variant="ghost" size="icon" className="h-6 w-6">
-                                    <MoreVertical className="h-3 w-3" />
-                                  </Button>
+                                  <Badge variant="outline" className="text-[9px] uppercase tracking-tighter h-4 px-1">{child.type}</Badge>
                                 </div>
                               </button>
                             ))}
@@ -989,6 +1126,17 @@ export default function App() {
             <div className="px-3 py-1.5 border-b mb-1">
               <p className="text-[10px] font-bold text-muted-foreground uppercase truncate">{contextMenu.node?.name}</p>
             </div>
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+              onClick={() => {
+                const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
+                handleCreateFolder(target);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              <span>New Folder</span>
+            </button>
+            <Separator className="my-1" />
             <button 
               className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
               onClick={() => {

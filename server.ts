@@ -145,6 +145,29 @@ async function startServer() {
     }
   });
 
+  // API to create a new folder
+  app.post("/api/new-folder", async (req, res) => {
+    try {
+      const { parentPath } = req.body;
+      if (!parentPath) return res.status(400).json({ error: "Parent path is required" });
+      
+      let folderName = "New Folder";
+      let targetPath = path.join(parentPath, folderName);
+      
+      let counter = 1;
+      while (await fileExists(targetPath)) {
+        folderName = `New Folder (${counter})`;
+        targetPath = path.join(parentPath, folderName);
+        counter++;
+      }
+
+      await fs.mkdir(targetPath);
+      res.json({ success: true, name: folderName, path: targetPath });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Raw file serving (for images)
   app.get("/api/raw", async (req, res) => {
     const filePath = req.query.path as string;
