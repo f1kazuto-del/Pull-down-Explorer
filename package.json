@@ -14,7 +14,7 @@
   },
   "build": {
     "appId": "com.example.file-explorer",
-    "productName": "Local File Explorer",
+    "productName": "Pull-down Explorer",
     "directories": {
       "output": "dist-electron"
     },

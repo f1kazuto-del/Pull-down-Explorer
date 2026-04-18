@@ -169,6 +169,7 @@ export default function App() {
   
   // Context Menu state
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, node: FileNode | null } | null>(null);
+  const [clipboard, setClipboard] = useState<{ node: FileNode; action: 'copy' | 'cut' } | null>(null);
 
   // Auto-scroll state
   const [autoScroll, setAutoScroll] = useState<{ active: boolean; x: number; y: number }>({ active: false, x: 0, y: 0 });
@@ -275,9 +276,10 @@ export default function App() {
               next.add(node.id);
               if (recursive && fresh.children) {
                 fresh.children = await Promise.all(
-                  fresh.children
-                    .filter(c => c.type === 'folder')
-                    .map(c => findAndFetch(c, true))
+                  fresh.children.map(async (c) => {
+                    if (c.type === 'folder') return findAndFetch(c, true);
+                    return c;
+                  })
                 );
               }
               return fresh;
@@ -482,6 +484,63 @@ export default function App() {
     setBookmarks(bookmarks.filter(b => b.id !== id));
   };
 
+  const handleCopy = (node: FileNode) => {
+    setClipboard({ node, action: 'copy' });
+    setContextMenu(null);
+  };
+
+  const handleCut = (node: FileNode) => {
+    setClipboard({ node, action: 'cut' });
+    setContextMenu(null);
+  };
+
+  const handlePaste = async (destinationNode: FileNode | null) => {
+    const target = destinationNode || selectedNode || rootNode;
+    if (!clipboard || !target || target.type !== 'folder') return;
+    
+    const url = clipboard.action === 'copy' ? '/api/copy' : '/api/move';
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: clipboard.node.id, destination: target.id })
+      });
+      
+      if (res.ok) {
+        if (clipboard.action === 'cut') setClipboard(null);
+        // Refresh the current view
+        if (rootNode) {
+          const fresh = await fetchDirectory(rootNode.id);
+          if (fresh) setRootNode(fresh);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setContextMenu(null);
+  };
+
+  const handleDelete = async (node: FileNode) => {
+    if (!confirm(`Are you sure you want to delete ${node.name}?`)) return;
+    try {
+      const res = await fetch('/api/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: node.id })
+      });
+      if (res.ok) {
+        // Refresh view
+        if (rootNode) {
+          const fresh = await fetchDirectory(rootNode.id);
+          if (fresh) setRootNode(fresh);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setContextMenu(null);
+  };
+
   if (loading && !rootNode) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-background">
@@ -605,6 +664,7 @@ export default function App() {
           <div 
             className="flex-1 overflow-y-auto custom-scrollbar" 
             onMouseDown={handleMiddleMouseDown}
+            onContextMenu={(e) => handleContextMenu(e, rootNode)}
           >
             <div className="p-2">
               <TreeItem
@@ -650,6 +710,7 @@ export default function App() {
                 <div 
                   className="flex-1 overflow-y-auto custom-scrollbar" 
                   onMouseDown={handleMiddleMouseDown}
+                  onContextMenu={(e) => handleContextMenu(e, selectedNode)}
                 >
                   <div className="max-w-4xl mx-auto p-8">
                     {selectedNode.type === 'folder' ? (
@@ -809,6 +870,7 @@ export default function App() {
                 <div 
                   className="flex-1 overflow-y-auto custom-scrollbar" 
                   onMouseDown={handleMiddleMouseDown}
+                  onContextMenu={(e) => handleContextMenu(e, rootNode)}
                 >
                   <div className="max-w-4xl mx-auto p-8">
                     <div className="space-y-6">
@@ -948,13 +1010,37 @@ export default function App() {
               <span>Open Folder</span>
             </button>
             <Separator className="my-1" />
-            <button className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left opacity-50 cursor-not-allowed">
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+              onClick={() => contextMenu.node && handleCopy(contextMenu.node)}
+            >
               <Copy className="h-4 w-4" />
               <span>Copy</span>
             </button>
-            <button className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left opacity-50 cursor-not-allowed">
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+              onClick={() => contextMenu.node && handleCut(contextMenu.node)}
+            >
               <Scissors className="h-4 w-4" />
               <span>Cut</span>
+            </button>
+            <button 
+              className={cn(
+                "w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left",
+                (!clipboard || (contextMenu.node && contextMenu.node.type !== 'folder')) && "opacity-50 cursor-not-allowed pointer-events-none"
+              )}
+              onClick={() => handlePaste(contextMenu.node)}
+            >
+              <Plus className="h-4 w-4" />
+              <span>Paste</span>
+            </button>
+            <Separator className="my-1" />
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-red-500/10 text-red-500 text-left"
+              onClick={() => contextMenu.node && handleDelete(contextMenu.node)}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Delete</span>
             </button>
             <Separator className="my-1" />
             <button 

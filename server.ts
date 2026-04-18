@@ -83,6 +83,68 @@ async function startServer() {
     }
   });
 
+  // API to copy file/folder
+  app.post("/api/copy", async (req, res) => {
+    try {
+      const { source, destination } = req.body;
+      if (!source || !destination) return res.status(400).json({ error: "Source and destination are required" });
+      
+      const sourceName = path.basename(source);
+      let targetPath = path.join(destination, sourceName);
+      
+      // Handle file name conflict
+      let counter = 1;
+      const ext = path.extname(sourceName);
+      const base = path.basename(sourceName, ext);
+      while (await fileExists(targetPath)) {
+        targetPath = path.join(destination, `${base} (${counter})${ext}`);
+        counter++;
+      }
+
+      await fs.cp(source, targetPath, { recursive: true });
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API to move file/folder
+  app.post("/api/move", async (req, res) => {
+    try {
+      const { source, destination } = req.body;
+      if (!source || !destination) return res.status(400).json({ error: "Source and destination are required" });
+      
+      const sourceName = path.basename(source);
+      let targetPath = path.join(destination, sourceName);
+      
+      // Handle name conflict for move too
+      let counter = 1;
+      const ext = path.extname(sourceName);
+      const base = path.basename(sourceName, ext);
+      while (await fileExists(targetPath)) {
+        targetPath = path.join(destination, `${base} (${counter})${ext}`);
+        counter++;
+      }
+
+      await fs.rename(source, targetPath);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API to delete file/folder
+  app.post("/api/delete", async (req, res) => {
+    try {
+      const { path: targetPath } = req.body;
+      if (!targetPath) return res.status(400).json({ error: "Path is required" });
+      await fs.rm(targetPath, { recursive: true, force: true });
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Raw file serving (for images)
   app.get("/api/raw", async (req, res) => {
     const filePath = req.query.path as string;
@@ -113,6 +175,15 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+}
+
+async function fileExists(path: string) {
+  try {
+    await fs.access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function formatBytes(bytes: number, decimals = 2) {

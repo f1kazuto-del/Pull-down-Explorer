@@ -14,7 +14,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
     },
-    title: "Local File Explorer"
+    title: "Pull-down Explorer"
   });
 
   // Create Menu
