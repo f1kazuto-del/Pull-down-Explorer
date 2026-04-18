@@ -21,7 +21,14 @@ import {
   List,
   ArrowLeft,
   ArrowRight,
-  ArrowUp
+  ArrowUp,
+  Star,
+  MoreVertical,
+  Trash2,
+  Copy,
+  Scissors,
+  ExternalLink,
+  Plus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -50,10 +57,11 @@ interface TreeItemProps {
   onSelect: (node: FileNode, multi?: boolean, range?: boolean) => void;
   onToggle: (id: string, recursive?: boolean) => void;
   onDoubleClick: (node: FileNode) => void;
+  onContextMenu: (e: React.MouseEvent, node: FileNode) => void;
   searchQuery: string;
 }
 
-const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, onDoubleClick, searchQuery }: TreeItemProps) => {
+const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, onDoubleClick, onContextMenu, searchQuery }: TreeItemProps) => {
   const isExpanded = expandedIds.has(node.id);
   const isSelected = selectedIds.has(node.id);
   const isFolder = node.type === 'folder';
@@ -81,6 +89,7 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
         onDoubleClick={() => {
           if (isFolder) onDoubleClick(node);
         }}
+        onContextMenu={(e) => onContextMenu(e, node)}
         className={cn(
           "group flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-all duration-75 relative select-none",
           isSelected 
@@ -133,6 +142,7 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
                 onSelect={onSelect}
                 onToggle={onToggle}
                 onDoubleClick={onDoubleClick}
+                onContextMenu={onContextMenu}
                 searchQuery={searchQuery}
               />
             ))}
@@ -152,6 +162,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [manualPath, setManualPath] = useState('');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [isResizing, setIsResizing] = useState(false);
+  const [bookmarks, setBookmarks] = useState<FileNode[]>([]);
+  
+  // Context Menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, node: FileNode | null } | null>(null);
 
   // Auto-scroll state
   const [autoScroll, setAutoScroll] = useState<{ active: boolean; x: number; y: number }>({ active: false, x: 0, y: 0 });
@@ -193,21 +210,30 @@ export default function App() {
         const vy = Math.abs(dy) > threshold ? dy : 0;
         setAutoScrollVelocity({ x: 0, y: vy });
       }
+      if (isResizing) {
+        const newWidth = Math.max(160, Math.min(600, e.clientX));
+        setSidebarWidth(newWidth);
+      }
     };
     const handleMouseUp = () => {
       setAutoScroll({ active: false, x: 0, y: 0 });
       setAutoScrollVelocity({ x: 0, y: 0 });
+      setIsResizing(false);
     };
+    const handleClickOutside = () => setContextMenu(null);
 
-    if (autoScroll.active) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('click', handleClickOutside);
+    window.addEventListener('contextmenu', handleClickOutside);
+
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('click', handleClickOutside);
+      window.removeEventListener('contextmenu', handleClickOutside);
     };
-  }, [autoScroll.active, autoScroll.y]);
+  }, [autoScroll.active, autoScroll.y, isResizing]);
 
   // Fetch directory structure
   const fetchDirectory = async (path?: string): Promise<FileNode | null> => {
@@ -286,7 +312,24 @@ export default function App() {
     const next = new Set(selectedIds);
 
     if (range && lastSelectedId) {
-      next.add(node.id);
+      // Get all visible nodes in the current view (main area)
+      const currentViewNodes = (selectedNode?.type === 'folder' ? selectedNode.children : rootNode?.children) || [];
+      if (currentViewNodes.length > 0) {
+        const currentIndex = currentViewNodes.findIndex(n => n.id === node.id);
+        const lastIndex = currentViewNodes.findIndex(n => n.id === lastSelectedId);
+        
+        if (currentIndex !== -1 && lastIndex !== -1) {
+          const start = Math.min(currentIndex, lastIndex);
+          const end = Math.max(currentIndex, lastIndex);
+          for (let i = start; i <= end; i++) {
+            next.add(currentViewNodes[i].id);
+          }
+        } else {
+          next.add(node.id);
+        }
+      } else {
+        next.add(node.id);
+      }
     } else if (multi) {
       if (next.has(node.id)) {
         next.delete(node.id);
@@ -423,6 +466,22 @@ export default function App() {
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent, node: FileNode) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, node });
+  };
+
+  const addBookmark = (node: FileNode) => {
+    if (!bookmarks.some(b => b.id === node.id)) {
+      setBookmarks([...bookmarks, node]);
+    }
+  };
+
+  const removeBookmark = (id: string) => {
+    setBookmarks(bookmarks.filter(b => b.id !== id));
+  };
+
   if (loading && !rootNode) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-background">
@@ -499,19 +558,50 @@ export default function App() {
           </div>
           <Separator orientation="vertical" className="h-6" />
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Button 
+              variant={viewMode === 'grid' ? 'secondary' : 'ghost'} 
+              size="icon" 
+              className="h-8 w-8"
+              onClick={() => setViewMode('grid')}
+            >
               <LayoutGrid className="h-4 w-4" />
             </Button>
-            <Button variant="secondary" size="icon" className="h-8 w-8">
+            <Button 
+              variant={viewMode === 'list' ? 'secondary' : 'ghost'} 
+              size="icon" 
+              className="h-8 w-8"
+              onClick={() => setViewMode('list')}
+            >
               <List className="h-4 w-4" />
             </Button>
           </div>
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden min-h-0">
+      <div className="flex-1 flex overflow-hidden min-h-0 relative">
         {/* Sidebar Tree */}
-        <aside className="w-72 border-r flex flex-col bg-muted/5 min-h-0">
+        <aside 
+          className="border-r flex flex-col bg-muted/5 min-h-0 overflow-hidden shrink-0"
+          style={{ width: `${sidebarWidth}px` }}
+        >
+          {/* Favorites/Bookmarks */}
+          {bookmarks.length > 0 && (
+            <div className="p-2 border-b">
+              <h3 className="px-2 pb-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Favorites</h3>
+              {bookmarks.map(bookmark => (
+                <button
+                  key={bookmark.id}
+                  onClick={() => handleSetRoot(bookmark)}
+                  onContextMenu={(e) => handleContextMenu(e, bookmark)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-muted/50 text-foreground/80 hover:text-foreground group"
+                >
+                  <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500" />
+                  <span className="truncate flex-1 text-left">{bookmark.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           <div 
             className="flex-1 overflow-y-auto custom-scrollbar" 
             onMouseDown={handleMiddleMouseDown}
@@ -525,11 +615,25 @@ export default function App() {
                 onSelect={handleSelect}
                 onToggle={toggleExpand}
                 onDoubleClick={handleSetRoot}
+                onContextMenu={handleContextMenu}
                 searchQuery={searchQuery}
               />
             </div>
           </div>
         </aside>
+
+        {/* Resizer Handle */}
+        <div 
+          className={cn(
+            "absolute top-0 bottom-0 w-1 cursor-col-resize z-20 hover:bg-primary/30 transition-colors",
+            isResizing && "bg-primary/50"
+          )}
+          style={{ left: `${sidebarWidth - 2}px` }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            setIsResizing(true);
+          }}
+        />
 
         {/* Main Content Area / Preview */}
         <main className="flex-1 overflow-hidden bg-card/30 min-h-0">
@@ -554,28 +658,78 @@ export default function App() {
                           <div className="w-16 h-16 rounded-xl bg-blue-500/10 flex items-center justify-center">
                             <Folder className="h-10 w-10 text-blue-500 fill-blue-500/20" />
                           </div>
-                          <div>
+                          <div className="flex-1">
                             <h1 className="text-2xl font-bold">{selectedNode.name}</h1>
                             <p className="text-sm text-muted-foreground">Folder — {selectedNode.children?.length || 0} items</p>
                           </div>
+                          <Button variant="outline" size="sm" onClick={() => addBookmark(selectedNode)}>
+                            <Star className="h-4 w-4 mr-2" />
+                            Favorite
+                          </Button>
                         </div>
                         <Separator />
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                          {selectedNode.children?.map(child => (
-                            <button
-                              key={child.id}
-                              onClick={() => handleSelect(child)}
-                              onDoubleClick={() => child.type === 'folder' && handleSetRoot(child)}
-                              className={cn(
-                                "flex flex-col items-center gap-2 p-4 rounded-xl transition-colors group",
-                                selectedIds.has(child.id) ? "bg-muted" : "hover:bg-muted/50"
-                              )}
-                            >
-                              <FileIcon type={child.type} className="h-12 w-12 transition-transform group-hover:scale-110" />
-                              <span className="text-xs font-medium text-center truncate w-full">{child.name}</span>
-                            </button>
-                          ))}
-                        </div>
+                        
+                        {viewMode === 'grid' ? (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                            {selectedNode.children?.map(child => (
+                              <button
+                                key={child.id}
+                                onClick={(e) => handleSelect(child, e.ctrlKey || e.metaKey, e.shiftKey)}
+                                onDoubleClick={() => child.type === 'folder' && handleSetRoot(child)}
+                                onContextMenu={(e) => handleContextMenu(e, child)}
+                                className={cn(
+                                  "flex flex-col items-center gap-2 p-4 rounded-xl transition-all group relative",
+                                  selectedIds.has(child.id) ? "bg-primary/10 ring-1 ring-primary/20" : "hover:bg-muted/50"
+                                )}
+                              >
+                                <FileIcon type={child.type} className="h-12 w-12 transition-transform group-hover:scale-110" />
+                                <span className="text-xs font-medium text-center truncate w-full px-1">{child.name}</span>
+                                {selectedIds.has(child.id) && (
+                                  <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest border-b mb-2">
+                              <div className="col-span-6">Name</div>
+                              <div className="col-span-3">Date Modified</div>
+                              <div className="col-span-2 text-right">Size</div>
+                              <div className="col-span-1"></div>
+                            </div>
+                            {selectedNode.children?.map(child => (
+                              <button
+                                key={child.id}
+                                onClick={(e) => handleSelect(child, e.ctrlKey || e.metaKey, e.shiftKey)}
+                                onDoubleClick={() => child.type === 'folder' && handleSetRoot(child)}
+                                onContextMenu={(e) => handleContextMenu(e, child)}
+                                className={cn(
+                                  "w-full grid grid-cols-12 gap-4 items-center px-4 py-2 rounded-lg text-sm group transition-colors",
+                                  selectedIds.has(child.id) ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"
+                                )}
+                              >
+                                <div className="col-span-6 flex items-center gap-3 min-w-0">
+                                  <FileIcon type={child.type} className="h-4 w-4 shrink-0" />
+                                  <span className="truncate">{child.name}</span>
+                                </div>
+                                <div className="col-span-3 text-xs text-muted-foreground truncate">
+                                  {child.modifiedAt}
+                                </div>
+                                <div className="col-span-2 text-xs text-muted-foreground text-right tabular-nums">
+                                  {child.size || '--'}
+                                </div>
+                                <div className="col-span-1 flex justify-end opacity-0 group-hover:opacity-100">
+                                  <Button variant="ghost" size="icon" className="h-6 w-6">
+                                    <MoreVertical className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-8">
@@ -658,32 +812,82 @@ export default function App() {
                 >
                   <div className="max-w-4xl mx-auto p-8">
                     <div className="space-y-6">
-                      <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                          <Folder className="h-10 w-10 text-blue-500 fill-blue-500/20" />
+                        <div className="flex items-center gap-4">
+                          <div className="w-16 h-16 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                            <Folder className="h-10 w-10 text-blue-500 fill-blue-500/20" />
+                          </div>
+                          <div className="flex-1">
+                            <h1 className="text-2xl font-bold">{rootNode.name}</h1>
+                            <p className="text-sm text-muted-foreground">Folder — {rootNode.children?.length || 0} items</p>
+                          </div>
+                          <Button variant="outline" size="sm" onClick={() => addBookmark(rootNode)}>
+                            <Star className="h-4 w-4 mr-2" />
+                            Favorite
+                          </Button>
                         </div>
-                        <div>
-                          <h1 className="text-2xl font-bold">{rootNode.name}</h1>
-                          <p className="text-sm text-muted-foreground">Folder — {rootNode.children?.length || 0} items</p>
-                        </div>
-                      </div>
-                      <Separator />
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                        {rootNode.children?.map(child => (
-                          <button
-                            key={child.id}
-                            onClick={() => handleSelect(child)}
-                            onDoubleClick={() => child.type === 'folder' && handleSetRoot(child)}
-                            className={cn(
-                              "flex flex-col items-center gap-2 p-4 rounded-xl transition-colors group",
-                              selectedIds.has(child.id) ? "bg-muted" : "hover:bg-muted/50"
-                            )}
-                          >
-                            <FileIcon type={child.type} className="h-12 w-12 transition-transform group-hover:scale-110" />
-                            <span className="text-xs font-medium text-center truncate w-full">{child.name}</span>
-                          </button>
-                        ))}
-                      </div>
+                        <Separator />
+                        
+                        {viewMode === 'grid' ? (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                            {rootNode.children?.map(child => (
+                              <button
+                                key={child.id}
+                                onClick={(e) => handleSelect(child, e.ctrlKey || e.metaKey, e.shiftKey)}
+                                onDoubleClick={() => child.type === 'folder' && handleSetRoot(child)}
+                                onContextMenu={(e) => handleContextMenu(e, child)}
+                                className={cn(
+                                  "flex flex-col items-center gap-2 p-4 rounded-xl transition-all group relative",
+                                  selectedIds.has(child.id) ? "bg-primary/10 ring-1 ring-primary/20" : "hover:bg-muted/50"
+                                )}
+                              >
+                                <FileIcon type={child.type} className="h-12 w-12 transition-transform group-hover:scale-110" />
+                                <span className="text-xs font-medium text-center truncate w-full px-1">{child.name}</span>
+                                {selectedIds.has(child.id) && (
+                                  <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest border-b mb-2">
+                              <div className="col-span-6">Name</div>
+                              <div className="col-span-3">Date Modified</div>
+                              <div className="col-span-2 text-right">Size</div>
+                              <div className="col-span-1"></div>
+                            </div>
+                            {rootNode.children?.map(child => (
+                              <button
+                                key={child.id}
+                                onClick={(e) => handleSelect(child, e.ctrlKey || e.metaKey, e.shiftKey)}
+                                onDoubleClick={() => child.type === 'folder' && handleSetRoot(child)}
+                                onContextMenu={(e) => handleContextMenu(e, child)}
+                                className={cn(
+                                  "w-full grid grid-cols-12 gap-4 items-center px-4 py-2 rounded-lg text-sm group transition-colors",
+                                  selectedIds.has(child.id) ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50"
+                                )}
+                              >
+                                <div className="col-span-6 flex items-center gap-3 min-w-0">
+                                  <FileIcon type={child.type} className="h-4 w-4 shrink-0" />
+                                  <span className="truncate">{child.name}</span>
+                                </div>
+                                <div className="col-span-3 text-xs text-muted-foreground truncate">
+                                  {child.modifiedAt}
+                                </div>
+                                <div className="col-span-2 text-xs text-muted-foreground text-right tabular-nums">
+                                  {child.size || '--'}
+                                </div>
+                                <div className="col-span-1 flex justify-end opacity-0 group-hover:opacity-100">
+                                  <Button variant="ghost" size="icon" className="h-6 w-6">
+                                    <MoreVertical className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                     </div>
                   </div>
                 </div>
@@ -708,6 +912,64 @@ export default function App() {
           <Badge variant="outline" className="h-4 text-[9px] px-1 uppercase tracking-tighter">Local</Badge>
         </div>
       </footer>
+      {/* Context Menu */}
+      <AnimatePresence>
+        {contextMenu && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.1 }}
+            className="fixed z-[100] min-w-[160px] bg-card border rounded-lg shadow-xl py-1 overflow-hidden"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-3 py-1.5 border-b mb-1">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase truncate">{contextMenu.node?.name}</p>
+            </div>
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+              onClick={() => {
+                if (contextMenu.node) addBookmark(contextMenu.node);
+                setContextMenu(null);
+              }}
+            >
+              <Star className="h-4 w-4 text-yellow-500" />
+              <span>Add to Bookmarks</span>
+            </button>
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+              onClick={() => {
+                if (contextMenu.node) handleSetRoot(contextMenu.node);
+                setContextMenu(null);
+              }}
+            >
+              <ExternalLink className="h-4 w-4" />
+              <span>Open Folder</span>
+            </button>
+            <Separator className="my-1" />
+            <button className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left opacity-50 cursor-not-allowed">
+              <Copy className="h-4 w-4" />
+              <span>Copy</span>
+            </button>
+            <button className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left opacity-50 cursor-not-allowed">
+              <Scissors className="h-4 w-4" />
+              <span>Cut</span>
+            </button>
+            <Separator className="my-1" />
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-red-500/10 text-red-500 text-left"
+              onClick={() => {
+                if (contextMenu.node) removeBookmark(contextMenu.node.id);
+                setContextMenu(null);
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Remove Bookmark</span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
