@@ -72,6 +72,7 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
   const isExpanded = expandedIds.has(node.id);
   const isSelected = selectedIds.has(node.id);
   const isFolder = node.type === 'folder';
+  const hasChildren = !node.isLoaded || (node.children && node.children.length > 0);
 
   // Filter children if there's a search query
   const visibleChildren = useMemo(() => {
@@ -124,10 +125,10 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
             className="w-4 h-4 flex items-center justify-center shrink-0 cursor-pointer hover:bg-white/10 rounded"
             onClick={(e) => {
               e.stopPropagation();
-              if (isFolder) onToggle(node.id, e.shiftKey);
+              if (isFolder && hasChildren) onToggle(node.id, e.shiftKey);
             }}
           >
-            {isFolder && (
+            {isFolder && hasChildren && (
               isExpanded ? <ChevronDown className="h-3 w-3 opacity-50" /> : <ChevronRight className="h-3 w-3 opacity-50" />
             )}
           </div>
@@ -173,6 +174,7 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
 
 export default function App() {
   const [rootNode, setRootNode] = useState<FileNode | null>(null);
+  const [viewNodeId, setViewNodeId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -197,6 +199,41 @@ export default function App() {
   const [autoScroll, setAutoScroll] = useState<{ active: boolean; x: number; y: number }>({ active: false, x: 0, y: 0 });
   const [autoScrollVelocity, setAutoScrollVelocity] = useState({ x: 0, y: 0 });
   const autoScrollTargetRef = useRef<HTMLElement | null>(null);
+
+  const parseSize = (sizeStr: string) => {
+    const units: Record<string, number> = { 'B': 1, 'KB': 1024, 'MB': 1024 ** 2, 'GB': 1024 ** 3, 'TB': 1024 ** 4 };
+    const match = sizeStr.match(/^([\d.]+)\s*([a-zA-Z]+)$/);
+    if (!match) return 0;
+    const value = parseFloat(match[1]);
+    const unit = match[2].toUpperCase();
+    return value * (units[unit] || 1);
+  };
+
+  const getSortedChildren = (children: FileNode[] | undefined) => {
+    if (!children) return [];
+    return [...children].sort((a, b) => {
+      // Folders always first for Name/Type sorting
+      if (sortConfig.key === 'name' || sortConfig.key === 'type') {
+        if (a.type === 'folder' && b.type !== 'folder') return -1;
+        if (a.type !== 'folder' && b.type === 'folder') return 1;
+      }
+
+      let valA: any = a[sortConfig.key as keyof FileNode] || '';
+      let valB: any = b[sortConfig.key as keyof FileNode] || '';
+
+      if (sortConfig.key === 'size') {
+        valA = parseSize(a.size || '0');
+        valB = parseSize(b.size || '0');
+      } else if (typeof valA === 'string') {
+        valA = valA.toLowerCase();
+        valB = valB.toLowerCase();
+      }
+
+      if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
 
   useEffect(() => {
     if (!autoScroll.active) return;
@@ -291,7 +328,9 @@ export default function App() {
       const data = await fetchDirectory();
       if (data) {
         setRootNode(data);
+        setViewNodeId(data.id);
         setExpandedIds(new Set([data.id]));
+        setSelectedIds(new Set([data.id]));
       }
       setLoading(false);
     };
@@ -518,26 +557,91 @@ export default function App() {
     return null;
   };
 
+  const viewNode = useMemo(() => {
+    if (!rootNode) return null;
+    if (!viewNodeId) return rootNode;
+    
+    const findNode = (node: FileNode, targetId: string): FileNode | null => {
+      if (node.id === targetId) return node;
+      if (node.children) {
+        for (const child of node.children) {
+          const found = findNode(child, targetId);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return findNode(rootNode, viewNodeId) || rootNode;
+  }, [rootNode, viewNodeId]);
+
+  const currentViewNodes = useMemo(() => {
+    return getSortedChildren(viewNode?.children);
+  }, [viewNode, sortConfig]);
+
   const breadcrumbs = useMemo(() => {
-    const target = selectedNode || rootNode;
+    const target = selectedNode || viewNode;
     if (!target) return [];
     return findPathToNode(target.id, rootNode) || [];
-  }, [selectedNode, rootNode]);
+  }, [selectedNode, viewNode, rootNode]);
 
   const rootBreadcrumbs = useMemo(() => {
-    if (!rootNode) return [];
-    setManualPath(rootNode.id); // Update manual path when root changes
-    // For local files, we might want to show the full path from the actual system root
-    // But for now let's just show the path from where we started
-    return findPathToNode(rootNode.id, rootNode) || [];
-  }, [rootNode]);
+    if (!viewNode) return [];
+    setManualPath(viewNode.id); // Update manual path when root changes
+    return findPathToNode(viewNode.id, rootNode) || [];
+  }, [viewNode, rootNode]);
 
   const handleSetRoot = async (node: FileNode) => {
     setLoading(true);
+    // If the node is not in our tree, or we need fresh data
     const data = await fetchDirectory(node.id);
     if (data) {
-      setRootNode(data);
-      setExpandedIds(new Set([data.id]));
+      if (!rootNode || !node.id.startsWith(rootNode.id)) {
+        // If we navigated outside the current tree, or it's initial load, reset tree
+        const isWin = data.id.includes(':');
+        const sep = isWin ? '\\' : '/';
+        const parts = data.id.split(sep);
+        
+        // Try to get a slightly higher root to provide context in sidebar
+        // e.g. if we are in C:\User\Downloads, let's try to load C:\User as sidebar root
+        if (parts.length > 1) {
+          const parentPath = parts.slice(0, -1).join(sep) || (isWin ? parts[0] + sep : '/');
+          const parentData = await fetchDirectory(parentPath);
+          if (parentData) {
+            setRootNode(parentData);
+          } else {
+            setRootNode(data);
+          }
+        } else {
+          setRootNode(data);
+        }
+      } else {
+        // Merge into existing tree
+        const updateTree = (n: FileNode): FileNode => {
+          if (n.id === data.id) return { ...n, ...data };
+          if (n.children) return { ...n, children: n.children.map(updateTree) };
+          return n;
+        };
+        setRootNode(updateTree(rootNode));
+      }
+      setViewNodeId(data.id);
+      
+      // Auto-expand parents in sidebar
+      const isWin = data.id.includes(':');
+      const sep = isWin ? '\\' : '/';
+      const parts = data.id.split(sep);
+      setExpandedIds(prev => {
+        const next = new Set(prev);
+        let current = '';
+        parts.forEach((p, i) => {
+          if (i === 0 && !isWin) current = '/';
+          else current += (current && current !== '/' ? sep : '') + p;
+          if (current) next.add(current);
+        });
+        return next;
+      });
+
+      // Highlight in sidebar
+      setSelectedIds(new Set([data.id]));
     }
     setLoading(false);
   };
@@ -654,6 +758,7 @@ export default function App() {
   const handleDragStart = (e: React.DragEvent, node: FileNode) => {
     setDraggedNode(node);
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/json', JSON.stringify({ id: node.id, type: node.type }));
     // Create a ghost image if needed, but default is fine
   };
 
@@ -693,45 +798,6 @@ export default function App() {
     }
     setDraggedNode(null);
   };
-
-  const parseSize = (sizeStr: string) => {
-    const units: Record<string, number> = { 'B': 1, 'KB': 1024, 'MB': 1024 ** 2, 'GB': 1024 ** 3, 'TB': 1024 ** 4 };
-    const match = sizeStr.match(/^([\d.]+)\s*([a-zA-Z]+)$/);
-    if (!match) return 0;
-    const value = parseFloat(match[1]);
-    const unit = match[2].toUpperCase();
-    return value * (units[unit] || 1);
-  };
-
-  const getSortedChildren = (children: FileNode[] | undefined) => {
-    if (!children) return [];
-    return [...children].sort((a, b) => {
-      // Folders always first for Name/Type sorting
-      if (sortConfig.key === 'name' || sortConfig.key === 'type') {
-        if (a.type === 'folder' && b.type !== 'folder') return -1;
-        if (a.type !== 'folder' && b.type === 'folder') return 1;
-      }
-
-      let valA: any = a[sortConfig.key as keyof FileNode] || '';
-      let valB: any = b[sortConfig.key as keyof FileNode] || '';
-
-      if (sortConfig.key === 'size') {
-        valA = parseSize(a.size || '0');
-        valB = parseSize(b.size || '0');
-      } else if (typeof valA === 'string') {
-        valA = valA.toLowerCase();
-        valB = valB.toLowerCase();
-      }
-
-      if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-  };
-
-  const currentViewNodes = useMemo(() => {
-    return getSortedChildren(rootNode?.children);
-  }, [rootNode, sortConfig]);
 
   if (loading && !rootNode) {
     return (
@@ -1042,7 +1108,7 @@ export default function App() {
               </motion.div>
             ) : (
               <motion.div
-                key={rootNode.id}
+                key={viewNode?.id || 'empty'}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className="h-full flex flex-col"
@@ -1050,7 +1116,7 @@ export default function App() {
                 <div 
                   className="flex-1 overflow-y-auto custom-scrollbar" 
                   onMouseDown={handleMiddleMouseDown}
-                  onContextMenu={(e) => handleContextMenu(e, rootNode)}
+                  onContextMenu={(e) => handleContextMenu(e, viewNode)}
                 >
                   <div className="max-w-4xl mx-auto p-8">
                     <div className="space-y-6">
@@ -1059,13 +1125,15 @@ export default function App() {
                             <Folder className="h-10 w-10 text-blue-500 fill-blue-500/20" />
                           </div>
                           <div className="flex-1">
-                            <h1 className="text-2xl font-bold">{rootNode.name}</h1>
-                            <p className="text-sm text-muted-foreground">Folder — {rootNode.children?.length || 0} items</p>
+                            <h1 className="text-2xl font-bold">{viewNode?.name}</h1>
+                            <p className="text-sm text-muted-foreground">Folder — {viewNode?.children?.length || 0} items</p>
                           </div>
-                          <Button variant="outline" size="sm" onClick={() => addBookmark(rootNode)}>
-                            <Star className="h-4 w-4 mr-2" />
-                            Favorite
-                          </Button>
+                          {viewNode && (
+                            <Button variant="outline" size="sm" onClick={() => addBookmark(viewNode)}>
+                              <Star className="h-4 w-4 mr-2" />
+                              Favorite
+                            </Button>
+                          )}
                         </div>
                         <Separator />
                         

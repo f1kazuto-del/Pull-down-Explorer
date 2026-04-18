@@ -9,4 +9,5 @@ export interface FileNode {
   children?: FileNode[];
   content?: string;
   imageUrl?: string;
+  isLoaded?: boolean;
 }

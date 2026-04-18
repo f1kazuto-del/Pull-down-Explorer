@@ -41,7 +41,8 @@ async function startServer() {
             type,
             size: entry.isDirectory() ? "" : formatBytes(entryStats.size),
             modifiedAt: entryStats.mtime.toISOString().split('T')[0],
-            children: entry.isDirectory() ? [] : undefined // Children will be fetched on demand
+            children: entry.isDirectory() ? [] : undefined,
+            isLoaded: false
           };
         } catch (e) {
           return null;
@@ -52,6 +53,7 @@ async function startServer() {
         id: targetPath,
         name: path.basename(targetPath) || targetPath,
         type: 'folder',
+        isLoaded: true,
         children: files.filter(f => f !== null)
       });
     } catch (error: any) {
