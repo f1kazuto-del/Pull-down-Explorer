@@ -150,6 +150,8 @@ export default function App() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isEditingPath, setIsEditingPath] = useState(false);
+  const [manualPath, setManualPath] = useState('');
 
   // Auto-scroll state
   const [autoScroll, setAutoScroll] = useState<{ active: boolean; x: number; y: number }>({ active: false, x: 0, y: 0 });
@@ -377,6 +379,7 @@ export default function App() {
 
   const rootBreadcrumbs = useMemo(() => {
     if (!rootNode) return [];
+    setManualPath(rootNode.id); // Update manual path when root changes
     // For local files, we might want to show the full path from the actual system root
     // But for now let's just show the path from where we started
     return findPathToNode(rootNode.id, rootNode) || [];
@@ -412,6 +415,14 @@ export default function App() {
     handleSetRoot({ id: parentPath, name: '', type: 'folder', modifiedAt: '' });
   };
 
+  const handleManualPathSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (manualPath.trim()) {
+      handleSetRoot({ id: manualPath.trim(), name: '', type: 'folder', modifiedAt: '' });
+      setIsEditingPath(false);
+    }
+  };
+
   if (loading && !rootNode) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-background">
@@ -439,23 +450,40 @@ export default function App() {
             </Button>
           </div>
           
-          <div className="flex items-center gap-1 text-sm font-medium text-muted-foreground overflow-hidden">
-            <HardDrive className="h-4 w-4 shrink-0" />
-            <span className="hover:text-foreground cursor-pointer transition-colors shrink-0" onClick={() => handleSetRoot({ id: '', name: '', type: 'folder', modifiedAt: '' })}>System Root</span>
-            {rootBreadcrumbs.map((node, i) => (
-              <div key={node.id} className="flex items-center gap-1 shrink-0">
-                <ChevronRight className="h-3 w-3 opacity-50" />
-                <span 
-                  className={cn(
-                    "hover:text-foreground cursor-pointer transition-colors truncate max-w-[120px]",
-                    i === rootBreadcrumbs.length - 1 && "text-foreground font-semibold"
-                  )}
-                  onClick={() => handleSetRoot(node)}
-                >
-                  {node.name || 'Root'}
-                </span>
+          <div className="flex-1 max-w-xl">
+            {isEditingPath ? (
+              <form onSubmit={handleManualPathSubmit} className="flex items-center gap-2">
+                <Input
+                  autoFocus
+                  value={manualPath}
+                  onChange={(e) => setManualPath(e.target.value)}
+                  onBlur={() => setIsEditingPath(false)}
+                  onKeyDown={(e) => e.key === 'Escape' && setIsEditingPath(false)}
+                  className="h-8 py-0 px-2 text-sm bg-muted/30 border-none focus-visible:ring-1 focus-visible:ring-primary/30"
+                />
+              </form>
+            ) : (
+              <div 
+                className="flex items-center gap-1 text-sm font-medium text-muted-foreground overflow-hidden cursor-text group px-2 py-1 rounded hover:bg-muted/30 transition-colors"
+                onClick={() => setIsEditingPath(true)}
+              >
+                <HardDrive className="h-4 w-4 shrink-0" />
+                <span className="shrink-0">System Root</span>
+                {rootBreadcrumbs.map((node, i) => (
+                  <div key={node.id} className="flex items-center gap-1 shrink-0">
+                    <ChevronRight className="h-3 w-3 opacity-50" />
+                    <span 
+                      className={cn(
+                        "truncate max-w-[200px]",
+                        i === rootBreadcrumbs.length - 1 ? "text-foreground" : ""
+                      )}
+                    >
+                      {node.name || 'Root'}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         </div>
 
