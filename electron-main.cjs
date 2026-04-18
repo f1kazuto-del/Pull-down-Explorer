@@ -52,9 +52,6 @@ function createWindow() {
   // Check for updates automatically on start
   autoUpdater.checkForUpdatesAndNotify();
 
-  // Open DevTools for debugging
-  mainWindow.webContents.openDevTools();
-
   // Start the backend server
   const isDev = !app.isPackaged;
   

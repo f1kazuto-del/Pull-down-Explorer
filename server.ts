@@ -135,6 +135,26 @@ async function startServer() {
     }
   });
 
+  // API to rename file/folder
+  app.post("/api/rename", async (req, res) => {
+    try {
+      const { path: targetPath, newName } = req.body;
+      if (!targetPath || !newName) return res.status(400).json({ error: "Path and new name are required" });
+      
+      const parentDir = path.dirname(targetPath);
+      const newPath = path.join(parentDir, newName);
+      
+      if (await fileExists(newPath)) {
+        return res.status(400).json({ error: "A file or folder with that name already exists" });
+      }
+
+      await fs.rename(targetPath, newPath);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // API to delete file/folder
   app.post("/api/delete", async (req, res) => {
     try {

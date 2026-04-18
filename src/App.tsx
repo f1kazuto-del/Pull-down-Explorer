@@ -24,13 +24,20 @@ import {
   ArrowUp,
   Star,
   MoreVertical,
+  MoreHorizontal,
   Trash2,
   Copy,
   Scissors,
   ExternalLink,
   Plus,
   FolderSearch,
-  FolderOpen
+  FolderOpen,
+  RefreshCw,
+  MousePointer2,
+  Download,
+  Type,
+  PanelRightClose,
+  PanelRightOpen
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,13 +73,23 @@ interface TreeItemProps {
   onDrop: (e: React.DragEvent, node: FileNode) => void;
   dragOverId: string | null;
   searchQuery: string;
+  renamingId: string | null;
+  renamingName: string;
+  setRenamingName: (name: string) => void;
+  onRenameSubmit: (path: string, newName: string) => void;
+  onRenameCancel: () => void;
 }
 
-const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, onDoubleClick, onContextMenu, onDragStart, onDragOver, onDragLeave, onDrop, dragOverId, searchQuery }: TreeItemProps) => {
+const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, onDoubleClick, onContextMenu, onDragStart, onDragOver, onDragLeave, onDrop, dragOverId, searchQuery, renamingId, renamingName, setRenamingName, onRenameSubmit, onRenameCancel }: TreeItemProps) => {
   const isExpanded = expandedIds.has(node.id);
   const isSelected = selectedIds.has(node.id);
   const isFolder = node.type === 'folder';
-  const hasChildren = !node.isLoaded || (node.children && node.children.length > 0);
+  
+  // A folder has children to show if it is not yet loaded (assume it might have) 
+  // OR if it has a non-empty children array.
+  const hasChildren = isFolder && (
+    node.children === undefined ? !node.isLoaded : node.children.length > 0
+  );
 
   // Filter children if there's a search query
   const visibleChildren = useMemo(() => {
@@ -87,6 +104,8 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
   if (searchQuery && !node.name.toLowerCase().includes(searchQuery.toLowerCase()) && visibleChildren.length === 0) {
     return null;
   }
+
+  const columnWidths = "grid-cols-[1fr_140px_100px_80px]";
 
   return (
     <div className="flex flex-col">
@@ -104,23 +123,26 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
         onDragLeave={onDragLeave}
         onDrop={(e) => onDrop(e, node)}
         className={cn(
-          "group flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-all duration-75 relative select-none",
+          "group grid items-center rounded-full text-sm transition-all duration-75 relative select-none mx-1 w-[calc(100%-8px)]",
+          columnWidths,
           isSelected 
-            ? "bg-[#1a1a1a] text-white" 
+            ? "bg-[#1a1a1a] text-white shadow-lg" 
             : "hover:bg-muted/50 text-foreground/80 hover:text-foreground",
           dragOverId === node.id && "bg-primary/20 ring-2 ring-primary/50"
         )}
-        style={{ paddingLeft: `${level * 16 + 8}px` }}
       >
-        {/* Connecting Line */}
-        {level > 0 && (
-          <div 
-            className="absolute left-0 top-0 bottom-0 w-[1px] bg-border/50" 
-            style={{ left: `${(level - 1) * 16 + 16}px` }}
-          />
-        )}
-        
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+        <div 
+          className="flex items-center gap-2 min-w-0 flex-1 py-1.5"
+          style={{ paddingLeft: `${level * 16 + 8}px` }}
+        >
+          {/* Connecting Line */}
+          {level > 0 && (
+            <div 
+              className="absolute h-full w-[1px] bg-border/20 top-0" 
+              style={{ left: `${(level - 1) * 16 + 20}px` }}
+            />
+          )}
+
           <div 
             className="w-4 h-4 flex items-center justify-center shrink-0 cursor-pointer hover:bg-white/10 rounded"
             onClick={(e) => {
@@ -133,7 +155,42 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
             )}
           </div>
           <FileIcon type={node.type} className={cn("h-4 w-4 shrink-0", isSelected && node.type === 'folder' && "text-blue-400")} />
-          <span className="truncate font-medium">{node.name}</span>
+          {renamingId === node.id ? (
+            <Input
+              autoFocus
+              className="h-6 py-0 px-1 text-xs bg-muted border-primary"
+              value={renamingName}
+              onChange={(e) => setRenamingName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onRenameSubmit(node.id, renamingName);
+                if (e.key === 'Escape') onRenameCancel();
+              }}
+              onBlur={() => onRenameSubmit(node.id, renamingName)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span className="truncate font-medium">{node.name}</span>
+          )}
+        </div>
+
+        {/* Metadata Columns */}
+        <div className={cn(
+          "px-3 text-[11px] truncate opacity-60 font-mono flex items-center h-full border-l border-border/10",
+          isSelected && "opacity-90 border-white/10"
+        )}>
+          {node.modifiedAt || '2024-04-18'}
+        </div>
+        <div className={cn(
+          "px-3 text-[11px] truncate opacity-60 flex items-center h-full border-l border-border/10 lowercase",
+          isSelected && "opacity-90 border-white/10 text-blue-200"
+        )}>
+          {node.type}
+        </div>
+        <div className={cn(
+          "px-3 text-[11px] truncate opacity-60 flex items-center h-full border-l border-border/10 justify-end font-mono",
+          isSelected && "opacity-90 border-white/10"
+        )}>
+          {node.size || '--'}
         </div>
       </button>
 
@@ -163,6 +220,11 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
                 onDrop={onDrop}
                 dragOverId={dragOverId}
                 searchQuery={searchQuery}
+                renamingId={renamingId}
+                renamingName={renamingName}
+                setRenamingName={setRenamingName}
+                onRenameSubmit={onRenameSubmit}
+                onRenameCancel={onRenameCancel}
               />
             ))}
           </motion.div>
@@ -183,13 +245,21 @@ export default function App() {
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [manualPath, setManualPath] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [sidebarWidth, setSidebarWidth] = useState(500);
   const [isResizing, setIsResizing] = useState(false);
-  const [bookmarks, setBookmarks] = useState<FileNode[]>([]);
+  const [bookmarks, setBookmarks] = useState<{ node: FileNode; alias?: string }[]>([]);
+  const [recentFolders, setRecentFolders] = useState<FileNode[]>([]);
+  const [showDebug, setShowDebug] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
   const [openedNode, setOpenedNode] = useState<FileNode | null>(null);
   const [draggedNode, setDraggedNode] = useState<FileNode | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [showDetailPane, setShowDetailPane] = useState(true);
+  const [pathCopied, setPathCopied] = useState(false);
+  const [renamingName, setRenamingName] = useState('');
+  const [renamingBookmarkId, setRenamingBookmarkId] = useState<string | null>(null);
+  const [renamingBookmarkName, setRenamingBookmarkName] = useState('');
   
   // Context Menu state
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, node: FileNode | null } | null>(null);
@@ -283,12 +353,22 @@ export default function App() {
     const handleClickOutside = () => setContextMenu(null);
 
     // Persistence for bookmarks
-    const saved = localStorage.getItem('explorer-bookmarks');
-    if (saved) {
+    const savedBookmarks = localStorage.getItem('explorer-bookmarks-v2');
+    if (savedBookmarks) {
       try {
-        setBookmarks(JSON.parse(saved));
+        setBookmarks(JSON.parse(savedBookmarks));
       } catch (e) {
         console.error('Failed to load bookmarks', e);
+      }
+    }
+
+    // Persistence for recent folders
+    const savedRecent = localStorage.getItem('explorer-recent-folders');
+    if (savedRecent) {
+      try {
+        setRecentFolders(JSON.parse(savedRecent));
+      } catch (e) {
+        console.error('Failed to load recent folders', e);
       }
     }
 
@@ -306,8 +386,12 @@ export default function App() {
   }, [autoScroll.active, autoScroll.y, isResizing]);
 
   useEffect(() => {
-    localStorage.setItem('explorer-bookmarks', JSON.stringify(bookmarks));
+    localStorage.setItem('explorer-bookmarks-v2', JSON.stringify(bookmarks));
   }, [bookmarks]);
+
+  useEffect(() => {
+    localStorage.setItem('explorer-recent-folders', JSON.stringify(recentFolders));
+  }, [recentFolders]);
 
   // Fetch directory structure
   const fetchDirectory = async (path?: string): Promise<FileNode | null> => {
@@ -325,8 +409,9 @@ export default function App() {
   // Initial load
   useEffect(() => {
     const init = async () => {
-      const data = await fetchDirectory();
-      if (data) {
+      const res = await fetchDirectory();
+      if (res) {
+        const data = { ...res, isLoaded: true };
         setRootNode(data);
         setViewNodeId(data.id);
         setExpandedIds(new Set([data.id]));
@@ -348,16 +433,17 @@ export default function App() {
           if (node.id === id || shouldExpandAll) {
             const fresh = await fetchDirectory(node.id);
             if (fresh) {
+              const nodeWithLoaded = { ...fresh, isLoaded: true };
               next.add(node.id);
-              if (recursive && fresh.children) {
-                fresh.children = await Promise.all(
-                  fresh.children.map(async (c) => {
+              if (recursive && nodeWithLoaded.children) {
+                nodeWithLoaded.children = await Promise.all(
+                  nodeWithLoaded.children.map(async (c) => {
                     if (c.type === 'folder') return findAndFetch(c, true);
                     return c;
                   })
                 );
               }
-              return fresh;
+              return nodeWithLoaded;
             }
             return node;
           }
@@ -460,9 +546,31 @@ export default function App() {
   const handleDoubleClick = (node: FileNode) => {
     if (node.type === 'folder') {
       handleSetRoot(node);
+      // Auto-expand in sidebar
+      setExpandedIds(prev => new Set([...prev, node.id]));
     } else {
       setOpenedNode(node);
     }
+  };
+
+  const addBookmark = (node: FileNode) => {
+    if (bookmarks.some(b => b.node.id === node.id)) return;
+    setBookmarks(prev => [...prev, { node }]);
+  };
+
+  const updateBookmarkAlias = (id: string, alias: string) => {
+    setBookmarks(prev => prev.map(b => b.node.id === id ? { ...b, alias: alias || undefined } : b));
+    setRenamingBookmarkId(null);
+  };
+
+  const removeBookmark = (id: string) => {
+    setBookmarks(prev => prev.filter(b => b.node.id !== id));
+  };
+
+  const handleCopyPath = (node: FileNode) => {
+    navigator.clipboard.writeText(node.id);
+    setPathCopied(true);
+    setTimeout(() => setPathCopied(false), 2000);
   };
 
   const handleRefresh = async () => {
@@ -473,18 +581,21 @@ export default function App() {
       // Always refresh the node if it's the root or if it's expanded
       if (node.id === rootNode.id || expandedIds.has(node.id)) {
         const fresh = await fetchDirectory(node.id);
-        if (fresh && node.children) {
-          // If we had children before, we need to preserve their expanded states
-          fresh.children = await Promise.all(
-            (fresh.children || []).map(async (child) => {
-              if (child.type === 'folder' && expandedIds.has(child.id)) {
-                return refreshNode(child);
-              }
-              return child;
-            })
-          );
+        if (fresh) {
+          const nodeWithLoaded = { ...fresh, isLoaded: true };
+          if (node.children && nodeWithLoaded.children) {
+            // If we had children before, we need to preserve their expanded states
+            nodeWithLoaded.children = await Promise.all(
+              nodeWithLoaded.children.map(async (child) => {
+                if (child.type === 'folder' && expandedIds.has(child.id)) {
+                  return refreshNode(child);
+                }
+                return child;
+              })
+            );
+          }
+          return nodeWithLoaded;
         }
-        return fresh || node;
       }
       return node;
     };
@@ -496,6 +607,27 @@ export default function App() {
   // Keyboard shortcuts for navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Debug mode toggle Ctrl+Alt+D
+      if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'd') {
+        setShowDebug(prev => !prev);
+        return;
+      }
+
+      // Preview pane toggle Ctrl+Alt+P
+      if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'p') {
+        setShowDetailPane(prev => !prev);
+        return;
+      }
+
+      // F2 Rename
+      if (e.key === 'F2') {
+        if (selectedNode) {
+          setRenamingId(selectedNode.id);
+          setRenamingName(selectedNode.name);
+        }
+        return;
+      }
+
       // F5 Refresh
       if (e.key === 'F5') {
         e.preventDefault();
@@ -591,10 +723,19 @@ export default function App() {
   }, [viewNode, rootNode]);
 
   const handleSetRoot = async (node: FileNode) => {
+    if (node.type !== 'folder') return;
     setLoading(true);
+
+    // Update Recent Folders
+    setRecentFolders(prev => {
+      const filtered = prev.filter(f => f.id !== node.id);
+      return [node, ...filtered].slice(0, 10);
+    });
+
     // If the node is not in our tree, or we need fresh data
-    const data = await fetchDirectory(node.id);
-    if (data) {
+    const res = await fetchDirectory(node.id);
+    if (res) {
+      const data = { ...res, isLoaded: true };
       if (!rootNode || !node.id.startsWith(rootNode.id)) {
         // If we navigated outside the current tree, or it's initial load, reset tree
         const isWin = data.id.includes(':');
@@ -680,16 +821,6 @@ export default function App() {
     setContextMenu({ x: e.clientX, y: e.clientY, node });
   };
 
-  const addBookmark = (node: FileNode) => {
-    if (!bookmarks.some(b => b.id === node.id)) {
-      setBookmarks([...bookmarks, node]);
-    }
-  };
-
-  const removeBookmark = (id: string) => {
-    setBookmarks(bookmarks.filter(b => b.id !== id));
-  };
-
   const handleCopy = (node: FileNode) => {
     setClipboard({ node, action: 'copy' });
     setContextMenu(null);
@@ -755,6 +886,29 @@ export default function App() {
     setContextMenu(null);
   };
 
+  const handleRenameSubmit = async (path: string, newName: string) => {
+    if (!newName.trim() || newName === path.split(/[/\\]/).pop()) {
+      setRenamingId(null);
+      return;
+    }
+    try {
+      const res = await fetch('/api/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, newName })
+      });
+      if (res.ok) {
+        handleRefresh();
+      } else {
+        const error = await res.json();
+        alert(error.error || "Failed to rename");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setRenamingId(null);
+  };
+
   const handleDragStart = (e: React.DragEvent, node: FileNode) => {
     setDraggedNode(node);
     e.dataTransfer.effectAllowed = 'move';
@@ -817,22 +971,113 @@ export default function App() {
       {/* Header */}
       <header className="h-14 border-b flex items-center justify-between px-4 bg-card/50 backdrop-blur-md z-10">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 mr-2 border-r pr-4">
+          <div className="flex items-center gap-2 mr-2 border-r pr-4 font-mono">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
               <FolderSearch className="h-5 w-5 text-primary" />
             </div>
-            <span className="font-bold tracking-tight hidden lg:inline-block whitespace-nowrap">Pull-down Explorer</span>
+            <span className="font-bold tracking-tight hidden lg:inline-block whitespace-nowrap">PULL-DOWN EXPLORER</span>
           </div>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleSetRoot({ id: '', name: '', type: 'folder', modifiedAt: '' })} title="Go to Root">
+          <div className="flex items-center gap-3">
+            <div className="relative w-64 group">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+              <Input 
+                placeholder="Search files..." 
+                className="pl-9 h-8 bg-muted/50 border-none focus-visible:ring-1 focus-visible:ring-primary"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            
+            <Separator orientation="vertical" className="h-6" />
+            
+            <div className="flex items-center gap-1">
+              <Button 
+                variant={viewMode === 'grid' ? 'secondary' : 'ghost'} 
+                size="icon" 
+                className="h-8 w-8"
+                onClick={() => setViewMode('grid')}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant={viewMode === 'list' ? 'secondary' : 'ghost'} 
+                size="icon" 
+                className="h-8 w-8"
+                onClick={() => setViewMode('list')}
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+           {showDebug && (
+             <Badge variant="destructive" className="animate-pulse">Debug Mode</Badge>
+           )}
+           <Separator orientation="vertical" className="h-6" />
+           <Button variant="ghost" size="sm" onClick={handleRefresh} className="h-8 gap-2">
+             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+             Refresh
+           </Button>
+        </div>
+      </header>
+
+      {/* Bookmarks & Path Bar */}
+      <div className="flex flex-col bg-muted/5 border-b shrink-0">
+        {/* Bookmarks Bar */}
+        <div className="h-10 px-6 flex items-center gap-3 overflow-x-auto scrollbar-hide border-b bg-white group">
+          <Star className="h-3.5 w-3.5 text-muted-foreground shrink-0 opacity-50" />
+          {bookmarks.length === 0 && <span className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] font-bold">No bookmarks</span>}
+          {bookmarks.map(b => (
+            <div key={b.node.id} className="flex items-center gap-0.5 shrink-0">
+              {renamingBookmarkId === b.node.id ? (
+                <form 
+                  onSubmit={(e) => { e.preventDefault(); updateBookmarkAlias(b.node.id, renamingBookmarkName); }}
+                  className="flex items-center"
+                >
+                  <Input 
+                    autoFocus
+                    className="h-6 py-0 px-2 text-xs w-24 bg-background"
+                    value={renamingBookmarkName}
+                    onChange={(e) => setRenamingBookmarkName(e.target.value)}
+                    onBlur={() => updateBookmarkAlias(b.node.id, renamingBookmarkName)}
+                  />
+                </form>
+              ) : (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className={cn(
+                    "h-7 px-2 text-xs gap-1.5 hover:bg-muted font-medium",
+                    viewNodeId === b.node.id && "bg-primary/10 text-primary"
+                  )}
+                  onClick={() => handleSetRoot(b.node)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ x: e.clientX, y: e.clientY, node: b.node });
+                  }}
+                >
+                  <Folder className="h-3 w-3 opacity-70" />
+                  {b.alias || b.node.name}
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Address Bar */}
+        <div className="h-12 px-4 flex items-center gap-4 bg-white">
+          <div className="flex items-center gap-1 border-r pr-4">
+            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted" onClick={() => handleSetRoot({ id: '', name: '', type: 'folder', modifiedAt: '' })} title="Go to Root">
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleGoUp} title="Go Up One Level">
+            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted" onClick={handleGoUp} title="Go Up One Level">
               <ArrowUp className="h-4 w-4" />
             </Button>
           </div>
-          
-          <div className="flex-1 max-w-xl">
+
+          <div className="flex-1 min-w-0">
             {isEditingPath ? (
               <form onSubmit={handleManualPathSubmit} className="flex items-center gap-2">
                 <Input
@@ -841,21 +1086,26 @@ export default function App() {
                   onChange={(e) => setManualPath(e.target.value)}
                   onBlur={() => setIsEditingPath(false)}
                   onKeyDown={(e) => e.key === 'Escape' && setIsEditingPath(false)}
-                  className="h-8 py-0 px-2 text-sm bg-muted/30 border-none focus-visible:ring-1 focus-visible:ring-primary/30"
+                  className="h-9 py-0 px-3 text-sm bg-muted/20 border rounded-lg focus-visible:ring-1 focus-visible:ring-primary/20"
                 />
               </form>
             ) : (
               <div 
-                className="flex items-center gap-1 text-sm font-medium text-muted-foreground overflow-hidden cursor-text group px-2 py-1 rounded hover:bg-muted/30 transition-colors"
+                className="flex items-center gap-2 text-sm font-medium text-muted-foreground overflow-hidden cursor-text group px-2 py-1.5 rounded-lg hover:bg-muted/30 transition-colors"
                 onClick={() => setIsEditingPath(true)}
               >
-                <HardDrive className="h-4 w-4 shrink-0" />
-                <span className="shrink-0">System Root</span>
+                <div 
+                  className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-muted transition-colors cursor-pointer"
+                  onClick={(e) => { e.stopPropagation(); handleSetRoot({ id: '/', name: '', type: 'folder', modifiedAt: '' }); }}
+                >
+                  <HardDrive className="h-4 w-4 shrink-0 text-slate-400" />
+                  <span className="shrink-0 font-bold text-foreground">Root</span>
+                </div>
                 {rootBreadcrumbs.map((node, i) => (
                   <div 
                     key={node.id} 
                     className={cn(
-                      "flex items-center gap-1 shrink-0 px-1 py-0.5 rounded transition-colors",
+                      "flex items-center gap-2 shrink-0 px-2 py-1 rounded-md transition-colors",
                       dragOverId === node.id && "bg-primary/20 ring-1 ring-primary/30"
                     )}
                     onDragOver={(e) => handleDragOver(e, node)}
@@ -866,11 +1116,12 @@ export default function App() {
                       handleSetRoot(node);
                     }}
                   >
-                    {i > 0 && <ChevronRight className="h-3 w-3 opacity-50" />}
+                    <ChevronRight className="h-3 w-3 opacity-30 shrink-0" />
+                    <Folder className="h-4 w-4 shrink-0 text-slate-400" />
                     <span 
                       className={cn(
                         "truncate max-w-[200px] cursor-pointer hover:text-foreground",
-                        i === rootBreadcrumbs.length - 1 ? "text-primary font-bold" : ""
+                        i === rootBreadcrumbs.length - 1 ? "text-foreground font-black border-b-2 border-primary pb-0.5" : "text-muted-foreground"
                       )}
                     >
                       {node.name || 'Root'}
@@ -880,12 +1131,13 @@ export default function App() {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-1 ml-4 border-l pl-4 hidden md:flex">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase mr-2">Sort:</span>
+
+          <div className="flex items-center gap-3 shrink-0 uppercase font-black text-[10px] tracking-widest text-muted-foreground">
+            <span className="mr-1">Sort:</span>
             <Button
               variant={sortConfig.key === 'name' ? 'secondary' : 'ghost'}
               size="sm"
-              className="h-7 text-[10px] px-2"
+              className="h-8 text-[11px] px-3 font-bold bg-white border border-slate-200 shadow-sm"
               onClick={() => setSortConfig(s => ({ key: 'name', direction: s.key === 'name' && s.direction === 'asc' ? 'desc' : 'asc' }))}
             >
               Name {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
@@ -893,53 +1145,32 @@ export default function App() {
             <Button
               variant={sortConfig.key === 'modifiedAt' ? 'secondary' : 'ghost'}
               size="sm"
-              className="h-7 text-[10px] px-2"
+              className="h-8 text-[11px] px-3 font-bold bg-white border border-slate-200 shadow-sm"
               onClick={() => setSortConfig(s => ({ key: 'modifiedAt', direction: s.key === 'modifiedAt' && s.direction === 'asc' ? 'desc' : 'asc' }))}
             >
-              Date {sortConfig.key === 'modifiedAt' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              Data
             </Button>
             <Button
               variant={sortConfig.key === 'size' ? 'secondary' : 'ghost'}
               size="sm"
-              className="h-7 text-[10px] px-2"
+              className="h-8 text-[11px] px-3 font-bold bg-white border border-slate-200 shadow-sm"
               onClick={() => setSortConfig(s => ({ key: 'size', direction: s.key === 'size' && s.direction === 'asc' ? 'desc' : 'asc' }))}
             >
-              Size {sortConfig.key === 'size' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              Size
+            </Button>
+            <Separator orientation="vertical" className="h-4 mx-1" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn("h-8 w-8", !showDetailPane && "text-primary bg-primary/10")}
+              onClick={() => setShowDetailPane(prev => !prev)}
+              title={showDetailPane ? "Hide Detail Pane (Ctrl+Alt+P)" : "Show Detail Pane (Ctrl+Alt+P)"}
+            >
+              {showDetailPane ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
             </Button>
           </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <div className="relative w-64 group">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-            <Input 
-              placeholder="Search files..." 
-              className="pl-9 h-8 bg-muted/50 border-none focus-visible:ring-1 focus-visible:ring-primary"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <Separator orientation="vertical" className="h-6" />
-          <div className="flex items-center gap-1">
-            <Button 
-              variant={viewMode === 'grid' ? 'secondary' : 'ghost'} 
-              size="icon" 
-              className="h-8 w-8"
-              onClick={() => setViewMode('grid')}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </Button>
-            <Button 
-              variant={viewMode === 'list' ? 'secondary' : 'ghost'} 
-              size="icon" 
-              className="h-8 w-8"
-              onClick={() => setViewMode('list')}
-            >
-              <List className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
+      </div>
 
       <div className="flex-1 flex overflow-hidden min-h-0 relative">
         {/* Sidebar Tree */}
@@ -947,27 +1178,30 @@ export default function App() {
           className="border-r flex flex-col bg-muted/5 min-h-0 overflow-hidden shrink-0"
           style={{ width: `${sidebarWidth}px` }}
         >
-          {/* Favorites/Bookmarks */}
-          {bookmarks.length > 0 && (
+          {/* Recent Folders */}
+          {recentFolders.length > 0 && (
             <div className="p-2 border-b">
-              <h3 className="px-2 pb-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Favorites</h3>
-              {bookmarks.map(bookmark => (
+              <h3 className="px-2 pb-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <Clock className="h-3 w-3" />
+                Recent
+              </h3>
+              {recentFolders.map(folder => (
                 <button
-                  key={bookmark.id}
-                  onClick={() => handleSetRoot(bookmark)}
-                  onContextMenu={(e) => handleContextMenu(e, bookmark)}
+                  key={`recent-${folder.id}`}
+                  onClick={() => handleSetRoot(folder)}
+                  onContextMenu={(e) => handleContextMenu(e, folder)}
                   draggable
-                  onDragStart={(e) => handleDragStart(e, bookmark)}
-                  onDragOver={(e) => handleDragOver(e, bookmark)}
+                  onDragStart={(e) => handleDragStart(e, folder)}
+                  onDragOver={(e) => handleDragOver(e, folder)}
                   onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, bookmark)}
+                  onDrop={(e) => handleDrop(e, folder)}
                   className={cn(
                     "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-all group",
-                    dragOverId === bookmark.id ? "bg-primary/20 ring-1 ring-primary/30" : "hover:bg-muted/50 text-foreground/80 hover:text-foreground"
+                    viewNodeId === folder.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50 text-foreground/80 hover:text-foreground"
                   )}
                 >
-                  <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500" />
-                  <span className="truncate flex-1 text-left">{bookmark.name}</span>
+                  <Folder className="h-3.5 w-3.5 text-blue-500/70" />
+                  <span className="truncate flex-1 text-left">{folder.name}</span>
                 </button>
               ))}
             </div>
@@ -978,6 +1212,16 @@ export default function App() {
             onMouseDown={handleMiddleMouseDown}
             onContextMenu={(e) => handleContextMenu(e, rootNode)}
           >
+            {/* Sidebar Column Headers */}
+            <div className="sticky top-0 bg-background/95 backdrop-blur-sm z-30 border-b grid grid-cols-[1fr_140px_100px_80px] text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/50 h-10 items-center px-4">
+              <div>名前</div>
+              <div className="px-3 border-l border-border/10 flex items-center gap-1">
+                更新日時 <ChevronDown className="h-2 w-2" />
+              </div>
+              <div className="px-3 border-l border-border/10">種類</div>
+              <div className="px-3 border-l border-border/10 text-right">サイズ</div>
+            </div>
+
             <div className="p-2">
               <TreeItem
                 node={rootNode}
@@ -994,6 +1238,11 @@ export default function App() {
                 onDrop={handleDrop}
                 dragOverId={dragOverId}
                 searchQuery={searchQuery}
+                renamingId={renamingId}
+                renamingName={renamingName}
+                setRenamingName={setRenamingName}
+                onRenameSubmit={handleRenameSubmit}
+                onRenameCancel={() => setRenamingId(null)}
               />
             </div>
           </div>
@@ -1012,233 +1261,189 @@ export default function App() {
           }}
         />
 
-        {/* Main Content Area / Preview */}
-        <main className="flex-1 overflow-hidden bg-card/30 min-h-0">
-          <AnimatePresence mode="wait">
-            {openedNode ? (
-              <motion.div
-                key={openedNode.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="h-full flex flex-col"
-              >
-                <div 
-                  className="h-12 border-b flex items-center px-4 bg-muted/20 gap-4"
-                >
-                  <Button variant="ghost" size="sm" onClick={() => setOpenedNode(null)} className="h-7 gap-2">
-                    <ArrowLeft className="h-4 w-4" />
-                    Back
-                  </Button>
-                  <Separator orientation="vertical" className="h-4" />
-                  <span className="text-sm font-medium truncate">{openedNode.name}</span>
-                </div>
-                <div 
-                  className="flex-1 overflow-y-auto custom-scrollbar" 
-                  onMouseDown={handleMiddleMouseDown}
-                  onContextMenu={(e) => handleContextMenu(e, openedNode)}
-                >
-                  <div className="max-w-4xl mx-auto p-8">
-                    <div className="space-y-8">
-                      <div className="flex flex-col items-center text-center gap-6">
-                        <div className="w-32 h-32 rounded-2xl bg-card shadow-sm border flex items-center justify-center">
-                          <FileIcon type={openedNode.type} className="h-16 w-16" />
+        {/* Main Content Area / Preview (Details Pane Style) */}
+        <AnimatePresence>
+          {showDetailPane && (
+            <motion.main 
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: "auto", opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ type: "spring", bounce: 0, duration: 0.3 }}
+              className="flex-1 overflow-hidden bg-background min-h-0 flex flex-col border-l relative"
+            >
+              <AnimatePresence mode="wait">
+                {!selectedNode && !openedNode ? (
+                  <motion.div
+                    key="empty-state"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="h-full flex flex-col items-center justify-center text-muted-foreground p-8 text-center"
+                  >
+                    <div className="w-20 h-20 rounded-full bg-muted/30 flex items-center justify-center mb-4">
+                      <MousePointer2 className="h-10 w-10 opacity-20" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-foreground/50">No Selection</h3>
+                    <p className="text-sm max-w-[200px] mt-2">Select a file or folder in the sidebar to view details and metadata.</p>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key={openedNode?.id || selectedNode?.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="h-full flex flex-col overflow-hidden"
+                  >
+                    {/* Details Header */}
+                    <div className="h-14 border-b flex items-center px-6 bg-muted/10 gap-4 shrink-0 justify-between">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <div className="p-2 rounded-lg bg-primary/10">
+                          <FileIcon type={(openedNode || selectedNode!).type} className="h-5 w-5 text-primary" />
                         </div>
-                        <div className="space-y-1">
-                          <h2 className="text-3xl font-bold tracking-tight">{openedNode.name}</h2>
-                          <p className="text-sm text-muted-foreground">{openedNode.type.toUpperCase()} — {openedNode.size}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="lg" className="px-8">Open File</Button>
-                          <Button size="lg" variant="outline">Share</Button>
-                        </div>
+                        <span className="font-bold truncate text-base">{(openedNode || selectedNode!).name}</span>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => addBookmark(openedNode || selectedNode!)} className="h-8 gap-2">
+                           <Star className="h-3.5 w-3.5" />
+                           Add Bookmark
+                        </Button>
+                        {openedNode && (
+                          <Button variant="secondary" size="sm" onClick={() => setOpenedNode(null)} className="h-8">Close Preview</Button>
+                        )}
+                      </div>
+                    </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        <div className="md:col-span-2 space-y-6">
-                          {openedNode.imageUrl && (
-                            <div className="rounded-2xl overflow-hidden border bg-card shadow-lg">
-                              <img 
-                                src={openedNode.imageUrl} 
-                                alt={openedNode.name} 
-                                className="w-full h-auto object-cover"
-                                referrerPolicy="no-referrer"
-                              />
-                            </div>
-                          )}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-0 bg-white">
+                      <div className="flex flex-col lg:flex-row h-full">
+                        {/* Visual Preview / Main Detail Component */}
+                        <div className="flex-1 min-w-0 border-r flex flex-col items-start p-8">
+                           <div className="w-full flex-1 flex flex-col min-h-0">
+                             {(openedNode || selectedNode!).imageUrl ? (
+                               <div className="flex-1 flex items-center justify-center bg-black/5 rounded-xl overflow-hidden border">
+                                 <img 
+                                   src={(openedNode || selectedNode!).imageUrl} 
+                                   alt={(openedNode || selectedNode!).name}
+                                   className="max-w-full max-h-full object-contain shadow-2xl"
+                                   referrerPolicy="no-referrer"
+                                 />
+                               </div>
+                             ) : (openedNode || selectedNode!).content ? (
+                               <div className="p-6 font-mono text-sm leading-relaxed overflow-x-auto whitespace-pre-wrap bg-muted/5 flex-1 border rounded-xl">
+                                  {(openedNode || selectedNode!).content}
+                               </div>
+                             ) : (
+                               <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground gap-4 border border-dashed rounded-xl">
+                                 <div className="w-24 h-24 rounded-2xl bg-muted/50 flex items-center justify-center">
+                                   <FileIcon type={(openedNode || selectedNode!).type} className="h-12 w-12 opacity-30" />
+                                 </div>
+                                 <div className="space-y-1">
+                                   <p className="font-semibold text-foreground/60 caps tracking-widest text-[10px]">No Content Preview Available</p>
+                                   <p className="text-xs">{(openedNode || selectedNode!).type.toUpperCase()} file</p>
+                                 </div>
+                               </div>
+                             )}
+                           </div>
 
-                          {openedNode.content && (
-                            <div className="space-y-3">
-                              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider px-1">Content Preview</h3>
-                              <div className="p-6 rounded-2xl bg-card border font-mono text-sm leading-relaxed overflow-x-auto whitespace-pre-wrap shadow-sm">
-                                {openedNode.content}
+                           {/* Contextual Actions - Left Aligned Stack */}
+                           <div className="mt-8 flex flex-col gap-3 w-48">
+                              <Button className="gap-2 bg-black hover:bg-black/90 text-white rounded-lg h-10 w-full justify-start px-4">
+                                <ExternalLink className="h-4 w-4" /> Open In System
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                className={cn(
+                                  "gap-2 rounded-lg h-10 w-full justify-start px-4 transition-all",
+                                  pathCopied && "border-green-500 text-green-600 bg-green-50"
+                                )}
+                                onClick={() => handleCopyPath(openedNode || selectedNode!)}
+                              >
+                                {pathCopied ? (
+                                  <>
+                                    <div className="h-4 w-4 rounded-full bg-green-500 flex items-center justify-center">
+                                      <svg className="h-2 w-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    </div>
+                                    Path Copied!
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="h-4 w-4" /> Copy Path
+                                  </>
+                                )}
+                              </Button>
+                              <div className="flex items-center gap-4 mt-2 px-2">
+                                 <Button variant="ghost" size="icon" title="Properties" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
+                                 <Button variant="ghost" size="icon" title="Delete" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-500/10">
+                                   <Trash2 className="h-4 w-4" />
+                                 </Button>
                               </div>
-                            </div>
-                          )}
+                           </div>
                         </div>
 
-                        <div className="space-y-6">
-                          <div className="p-6 rounded-2xl bg-muted/30 border space-y-4">
-                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Information</h3>
-                            <div className="space-y-3 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Kind</span>
-                                <span className="font-medium">{openedNode.type}</span>
+                        {/* Meta Sidebar (Technical Info) */}
+                        <div className="w-full lg:w-[400px] shrink-0 flex flex-col bg-white border-l">
+                          <div className="p-8 space-y-10">
+                            {/* Technical Specs */}
+                            <div className="space-y-5">
+                              <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.25em] flex items-center gap-2">
+                                 Technical Specs
+                              </h3>
+                              <div className="space-y-4 text-xs font-medium">
+                                <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                  <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Type</span>
+                                  <Badge variant="secondary" className="uppercase text-[9px] h-5 font-bold tracking-widest px-2">{(openedNode || selectedNode!).type}</Badge>
+                                </div>
+                                <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                  <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Size</span>
+                                  <span className="font-mono font-bold text-foreground">{(openedNode || selectedNode!).size || '73 Bytes'}</span>
+                                </div>
+                                <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                  <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Created</span>
+                                  <span className="font-mono opacity-60">2024-03-24</span>
+                                </div>
+                                <div className="flex justify-between items-center py-2 border-b border-dashed">
+                                  <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Modified</span>
+                                  <span className="font-mono opacity-60">{(openedNode || selectedNode!).modifiedAt || '2026-04-18'}</span>
+                                </div>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Size</span>
-                                <span className="font-medium">{openedNode.size || '--'}</span>
+                            </div>
+
+                            {/* Access Control */}
+                            <div className="space-y-5">
+                              <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.25em]">Access Control</h3>
+                              <div className="flex items-center gap-3">
+                                <div className="flex -space-x-2">
+                                  <div className="h-8 w-8 rounded-full bg-[#3b82f6] border-2 border-white flex items-center justify-center text-[10px] text-white font-bold shadow-sm">JD</div>
+                                  <div className="h-8 w-8 rounded-full bg-[#10b981] border-2 border-white flex items-center justify-center text-[10px] text-white font-bold shadow-sm">AS</div>
+                                  <div className="h-8 w-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] text-slate-400 font-bold shadow-sm">+3</div>
+                                </div>
+                                <span className="text-[10px] font-semibold text-muted-foreground">5 users with access</span>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Modified</span>
-                                <span className="font-medium">{openedNode.modifiedAt}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Created</span>
-                                <span className="font-medium">2024-03-15</span>
+                              <Button variant="outline" size="sm" className="w-full text-[10px] h-9 uppercase tracking-[0.1em] font-bold shadow-sm">Manage Access</Button>
+                            </div>
+
+                            {/* Full Path */}
+                            <div className="space-y-5">
+                              <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.25em]">Full Path</h3>
+                              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-[11px] font-mono break-all leading-relaxed shadow-inner">
+                                /app/applet/{(openedNode || selectedNode!).name}
                               </div>
                             </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key={viewNode?.id || 'empty'}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="h-full flex flex-col"
-              >
-                <div 
-                  className="flex-1 overflow-y-auto custom-scrollbar" 
-                  onMouseDown={handleMiddleMouseDown}
-                  onContextMenu={(e) => handleContextMenu(e, viewNode)}
-                >
-                  <div className="max-w-4xl mx-auto p-8">
-                    <div className="space-y-6">
-                        <div className="flex items-center gap-4">
-                          <div className="w-16 h-16 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                            <Folder className="h-10 w-10 text-blue-500 fill-blue-500/20" />
-                          </div>
-                          <div className="flex-1">
-                            <h1 className="text-2xl font-bold">{viewNode?.name}</h1>
-                            <p className="text-sm text-muted-foreground">Folder — {viewNode?.children?.length || 0} items</p>
-                          </div>
-                          {viewNode && (
-                            <Button variant="outline" size="sm" onClick={() => addBookmark(viewNode)}>
-                              <Star className="h-4 w-4 mr-2" />
-                              Favorite
-                            </Button>
-                          )}
-                        </div>
-                        <Separator />
-                        
-                        {viewMode === 'grid' ? (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                            {currentViewNodes.map(child => (
-                              <button
-                                key={child.id}
-                                onClick={(e) => handleSelect(child, e.ctrlKey || e.metaKey, e.shiftKey)}
-                                onDoubleClick={() => handleDoubleClick(child)}
-                                onContextMenu={(e) => handleContextMenu(e, child)}
-                                draggable
-                                onDragStart={(e) => handleDragStart(e, child)}
-                                onDragOver={(e) => handleDragOver(e, child)}
-                                onDragLeave={handleDragLeave}
-                                onDrop={(e) => handleDrop(e, child)}
-                                className={cn(
-                                  "flex flex-col items-center gap-2 p-4 rounded-xl transition-all group relative",
-                                  selectedIds.has(child.id) ? "bg-primary/10 ring-1 ring-primary/20" : "hover:bg-muted/50",
-                                  dragOverId === child.id && "bg-primary/20 ring-2 ring-primary/50"
-                                )}
-                              >
-                                <FileIcon type={child.type} className="h-12 w-12 transition-transform group-hover:scale-110" />
-                                <span className="text-xs font-medium text-center truncate w-full px-1">{child.name}</span>
-                                {selectedIds.has(child.id) && (
-                                  <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-primary flex items-center justify-center">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                                  </div>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <div className="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest border-b mb-2 select-none">
-                              <div 
-                                className="col-span-6 cursor-pointer hover:text-foreground flex items-center gap-1"
-                                onClick={() => setSortConfig(s => ({ key: 'name', direction: s.key === 'name' && s.direction === 'asc' ? 'desc' : 'asc' }))}
-                              >
-                                Name {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                              </div>
-                              <div 
-                                className="col-span-3 cursor-pointer hover:text-foreground flex items-center gap-1"
-                                onClick={() => setSortConfig(s => ({ key: 'modifiedAt', direction: s.key === 'modifiedAt' && s.direction === 'asc' ? 'desc' : 'asc' }))}
-                              >
-                                Date Modified {sortConfig.key === 'modifiedAt' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                              </div>
-                              <div 
-                                className="col-span-2 text-right cursor-pointer hover:text-foreground flex items-center gap-1 justify-end"
-                                onClick={() => setSortConfig(s => ({ key: 'size', direction: s.key === 'size' && s.direction === 'asc' ? 'desc' : 'asc' }))}
-                              >
-                                Size {sortConfig.key === 'size' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                              </div>
-                              <div 
-                                className="col-span-1 cursor-pointer hover:text-foreground text-center"
-                                onClick={() => setSortConfig(s => ({ key: 'type', direction: s.key === 'type' && s.direction === 'asc' ? 'desc' : 'asc' }))}
-                              >
-                                {sortConfig.key === 'type' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                              </div>
-                            </div>
-                            {currentViewNodes.map(child => (
-                              <button
-                                key={child.id}
-                                onClick={(e) => handleSelect(child, e.ctrlKey || e.metaKey, e.shiftKey)}
-                                onDoubleClick={() => handleDoubleClick(child)}
-                                onContextMenu={(e) => handleContextMenu(e, child)}
-                                draggable
-                                onDragStart={(e) => handleDragStart(e, child)}
-                                onDragOver={(e) => handleDragOver(e, child)}
-                                onDragLeave={handleDragLeave}
-                                onDrop={(e) => handleDrop(e, child)}
-                                className={cn(
-                                  "w-full grid grid-cols-12 gap-4 items-center px-4 py-2 rounded-lg text-sm group transition-colors",
-                                  selectedIds.has(child.id) ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50",
-                                  dragOverId === child.id && "bg-primary/20 ring-2 ring-primary/50"
-                                )}
-                              >
-                                <div className="col-span-6 flex items-center gap-3 min-w-0">
-                                  <FileIcon type={child.type} className="h-4 w-4 shrink-0" />
-                                  <span className="truncate">{child.name}</span>
-                                </div>
-                                <div className="col-span-3 text-xs text-muted-foreground truncate font-mono">
-                                  {child.modifiedAt}
-                                </div>
-                                <div className="col-span-2 text-xs text-muted-foreground text-right tabular-nums font-mono">
-                                  {child.size || '--'}
-                                </div>
-                                <div className="col-span-1 flex justify-end opacity-0 group-hover:opacity-100">
-                                  <Badge variant="outline" className="text-[9px] uppercase tracking-tighter h-4 px-1">{child.type}</Badge>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </main>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.main>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Footer / Status Bar */}
-      <footer className="h-8 border-t bg-muted/30 flex items-center justify-between px-4 text-[11px] font-medium text-muted-foreground">
+      <footer className="h-8 border-t bg-muted/30 flex items-center justify-between px-4 text-[11px] font-medium text-muted-foreground z-10">
         <div className="flex items-center gap-4">
           {selectedIds.size > 0 ? (
             <span>{selectedIds.size} items selected</span>
@@ -1256,6 +1461,49 @@ export default function App() {
           <Badge variant="outline" className="h-4 text-[9px] px-1 uppercase tracking-tighter">Local</Badge>
         </div>
       </footer>
+
+      {/* Debug Overlay */}
+      <AnimatePresence>
+        {showDebug && (
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="fixed bottom-12 right-6 z-50 w-72 max-h-[400px] bg-card/95 backdrop-blur border rounded-xl shadow-2xl overflow-hidden flex flex-col border-primary/20"
+          >
+            <div className="bg-primary/10 px-4 py-2 border-b flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-widest text-primary">System Debug</span>
+              <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => setShowDebug(false)}>
+                <Plus className="h-3 w-3 rotate-45" />
+              </Button>
+            </div>
+            <div className="p-4 overflow-y-auto text-[10px] font-mono space-y-3 custom-scrollbar">
+              <div className="space-y-1">
+                <p className="text-muted-foreground"># VIEW STATE</p>
+                <p><span className="text-primary">root:</span> {rootNode.id}</p>
+                <p><span className="text-primary">view:</span> {viewNode?.id}</p>
+                <p><span className="text-primary">opened:</span> {openedNode?.id || 'null'}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-muted-foreground"># SELECTION</p>
+                <p><span className="text-primary">count:</span> {selectedIds.size}</p>
+                <p><span className="text-primary">ids:</span> {Array.from(selectedIds).join(', ')}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-muted-foreground"># CLIPBOARD</p>
+                <p><span className="text-primary">node:</span> {clipboard?.node.id || 'null'}</p>
+                <p><span className="text-primary">action:</span> {clipboard?.action || 'null'}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-muted-foreground"># BOOKMARKS</p>
+                {bookmarks.map(b => (
+                  <p key={b.node.id}>- {b.alias || b.node.name} ({b.node.id})</p>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Context Menu */}
       <AnimatePresence>
         {contextMenu && (
@@ -1281,59 +1529,33 @@ export default function App() {
               <Plus className="h-4 w-4" />
               <span>New Folder</span>
             </button>
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+              onClick={() => {
+                if (contextMenu.node) {
+                  setRenamingId(contextMenu.node.id);
+                  setRenamingName(contextMenu.node.name);
+                }
+                setContextMenu(null);
+              }}
+            >
+              <FileText className="h-4 w-4" />
+              <span>Rename</span>
+              <span className="ml-auto text-[10px] text-muted-foreground mr-1">F2</span>
+            </button>
             <Separator className="my-1" />
             <button 
               className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
               onClick={() => {
-                if (contextMenu.node) addBookmark(contextMenu.node);
+                if (contextMenu.node) {
+                  setRenamingBookmarkId(contextMenu.node.id);
+                  setRenamingBookmarkName(bookmarks.find(b => b.node.id === contextMenu.node?.id)?.alias || contextMenu.node.name);
+                }
                 setContextMenu(null);
               }}
             >
-              <Star className="h-4 w-4 text-yellow-500" />
-              <span>Add to Bookmarks</span>
-            </button>
-            <button 
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
-              onClick={() => {
-                if (contextMenu.node) handleSetRoot(contextMenu.node);
-                setContextMenu(null);
-              }}
-            >
-              <ExternalLink className="h-4 w-4" />
-              <span>Open Folder</span>
-            </button>
-            <Separator className="my-1" />
-            <button 
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
-              onClick={() => contextMenu.node && handleCopy(contextMenu.node)}
-            >
-              <Copy className="h-4 w-4" />
-              <span>Copy</span>
-            </button>
-            <button 
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
-              onClick={() => contextMenu.node && handleCut(contextMenu.node)}
-            >
-              <Scissors className="h-4 w-4" />
-              <span>Cut</span>
-            </button>
-            <button 
-              className={cn(
-                "w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left",
-                (!clipboard || (contextMenu.node && contextMenu.node.type !== 'folder')) && "opacity-50 cursor-not-allowed pointer-events-none"
-              )}
-              onClick={() => handlePaste(contextMenu.node)}
-            >
-              <Plus className="h-4 w-4" />
-              <span>Paste</span>
-            </button>
-            <Separator className="my-1" />
-            <button 
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-red-500/10 text-red-500 text-left"
-              onClick={() => contextMenu.node && handleDelete(contextMenu.node)}
-            >
-              <Trash2 className="h-4 w-4" />
-              <span>Delete</span>
+              <Type className="h-4 w-4" />
+              <span>Edit Bookmark Name</span>
             </button>
             <Separator className="my-1" />
             <button 
