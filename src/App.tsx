@@ -397,9 +397,44 @@ export default function App() {
     return findNode(rootNode, id);
   }, [selectedIds, rootNode]);
 
+  const handleRefresh = async () => {
+    if (!rootNode) return;
+    
+    // We want to refresh the root node and all currently expanded folders to maintain the tree state
+    const refreshNode = async (node: FileNode): Promise<FileNode> => {
+      // Always refresh the node if it's the root or if it's expanded
+      if (node.id === rootNode.id || expandedIds.has(node.id)) {
+        const fresh = await fetchDirectory(node.id);
+        if (fresh && node.children) {
+          // If we had children before, we need to preserve their expanded states
+          fresh.children = await Promise.all(
+            (fresh.children || []).map(async (child) => {
+              if (child.type === 'folder' && expandedIds.has(child.id)) {
+                return refreshNode(child);
+              }
+              return child;
+            })
+          );
+        }
+        return fresh || node;
+      }
+      return node;
+    };
+
+    const newRoot = await refreshNode(rootNode);
+    setRootNode(newRoot);
+  };
+
   // Keyboard shortcuts for navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // F5 Refresh
+      if (e.key === 'F5') {
+        e.preventDefault();
+        handleRefresh();
+        return;
+      }
+
       if (!selectedNode) return;
 
       if (e.key === 'ArrowRight') {
@@ -522,11 +557,7 @@ export default function App() {
       
       if (res.ok) {
         if (clipboard.action === 'cut') setClipboard(null);
-        // Refresh the current view
-        if (rootNode) {
-          const fresh = await fetchDirectory(rootNode.id);
-          if (fresh) setRootNode(fresh);
-        }
+        handleRefresh();
       }
     } catch (err) {
       console.error(err);
@@ -543,11 +574,7 @@ export default function App() {
         body: JSON.stringify({ path: node.id })
       });
       if (res.ok) {
-        // Refresh view
-        if (rootNode) {
-          const fresh = await fetchDirectory(rootNode.id);
-          if (fresh) setRootNode(fresh);
-        }
+        handleRefresh();
       }
     } catch (err) {
       console.error(err);
@@ -563,11 +590,7 @@ export default function App() {
         body: JSON.stringify({ parentPath })
       });
       if (res.ok) {
-        // Refresh view
-        if (rootNode) {
-          const fresh = await fetchDirectory(rootNode.id);
-          if (fresh) setRootNode(fresh);
-        }
+        handleRefresh();
       }
     } catch (err) {
       console.error(err);
