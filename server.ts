@@ -6,6 +6,8 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+import AdminZip from "adm-zip";
+
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
@@ -232,6 +234,32 @@ async function startServer() {
 
       await fs.mkdir(targetPath);
       res.json({ success: true, name: folderName, path: targetPath });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API to extract ZIP
+  app.post("/api/extract", async (req, res) => {
+    try {
+      const { path: zipPath } = req.body;
+      if (!zipPath) return res.status(400).json({ error: "Path is required" });
+
+      const parentDir = path.dirname(zipPath);
+      const fileName = path.basename(zipPath, path.extname(zipPath));
+      let extractPath = path.join(parentDir, fileName);
+
+      // Handle exists conflict
+      let counter = 1;
+      while (await fileExists(extractPath)) {
+        extractPath = path.join(parentDir, `${fileName} (${counter})`);
+        counter++;
+      }
+
+      const zip = new AdminZip(zipPath);
+      zip.extractAllTo(extractPath, true);
+      
+      res.json({ success: true, path: extractPath });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

@@ -42,7 +42,8 @@ import {
   PanelRightOpen,
   Maximize2,
   Minimize2,
-  X
+  X,
+  Archive
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -734,6 +735,12 @@ export default function App() {
     setSelectedIds(next);
     setLastSelectedId(node.id);
 
+    // If software view is open and we click a document/image, update it to the new selection
+    if (isSoftwareOpen && node.type !== 'folder') {
+      handleOpenNode(node);
+      return; // handleOpenNode handles the content fetching
+    }
+
     // Fetch file content if it's a file and not already loaded
     if (node.type !== 'folder' && !node.content && !node.imageUrl) {
       try {
@@ -794,6 +801,25 @@ export default function App() {
       }
       setIsSoftwareOpen(true);
     }
+  };
+
+  const handleExtract = async (node: FileNode) => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: node.id })
+      });
+      if (res.ok) {
+        await handleRefresh();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+    setContextMenu(null);
   };
 
   const handleDoubleClick = async (node: FileNode) => {
@@ -1580,7 +1606,7 @@ export default function App() {
                   </motion.div>
                 ) : (
                   <motion.div
-                    key={openedNode?.id || selectedNode?.id}
+                    key={selectedNode?.id || openedNode?.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
@@ -1591,12 +1617,12 @@ export default function App() {
                     <div className="h-14 border-b flex items-center px-6 bg-muted/10 gap-4 shrink-0 justify-between">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <div className="p-2 rounded-lg bg-primary/10">
-                          <FileIcon type={(openedNode || selectedNode!).type} className="h-5 w-5 text-primary" />
+                          <FileIcon type={(selectedNode || openedNode!).type} className="h-5 w-5 text-primary" />
                         </div>
-                        <span className="font-bold truncate text-base">{(openedNode || selectedNode!).name}</span>
+                        <span className="font-bold truncate text-base">{(selectedNode || openedNode!).name}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => addBookmark(openedNode || selectedNode!)} className="h-8 gap-2">
+                        <Button variant="outline" size="sm" onClick={() => addBookmark(selectedNode || openedNode!)} className="h-8 gap-2">
                            <Star className="h-3.5 w-3.5" />
                            Add Bookmark
                         </Button>
@@ -1611,27 +1637,27 @@ export default function App() {
                         {/* Visual Preview / Main Detail Component */}
                         <div className="flex-1 min-w-0 border-r flex flex-col items-start p-8">
                            <div className="w-full flex-1 flex flex-col min-h-0">
-                             {(openedNode || selectedNode!).imageUrl ? (
+                             {(selectedNode || openedNode!).imageUrl ? (
                                <div className="flex-1 flex items-center justify-center bg-black/5 rounded-xl overflow-hidden border">
                                  <img 
-                                   src={(openedNode || selectedNode!).imageUrl} 
-                                   alt={(openedNode || selectedNode!).name}
+                                   src={(selectedNode || openedNode!).imageUrl} 
+                                   alt={(selectedNode || openedNode!).name}
                                    className="max-w-full max-h-full object-contain shadow-2xl"
                                    referrerPolicy="no-referrer"
                                  />
                                </div>
-                             ) : (openedNode || selectedNode!).content ? (
+                             ) : (selectedNode || openedNode!).content ? (
                                <div className="p-6 font-mono text-sm leading-relaxed overflow-x-auto whitespace-pre-wrap bg-muted/5 flex-1 border rounded-xl">
-                                  {(openedNode || selectedNode!).content}
+                                  {(selectedNode || openedNode!).content}
                                </div>
                              ) : (
                                <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground gap-4 border border-dashed rounded-xl">
                                  <div className="w-24 h-24 rounded-2xl bg-muted/50 flex items-center justify-center">
-                                   <FileIcon type={(openedNode || selectedNode!).type} className="h-12 w-12 opacity-30" />
+                                   <FileIcon type={(selectedNode || openedNode!).type} className="h-12 w-12 opacity-30" />
                                  </div>
                                  <div className="space-y-1">
                                    <p className="font-semibold text-foreground/60 caps tracking-widest text-[10px]">No Content Preview Available</p>
-                                   <p className="text-xs">{(openedNode || selectedNode!).type.toUpperCase()} file</p>
+                                   <p className="text-xs">{(selectedNode || openedNode!).type.toUpperCase()} file</p>
                                  </div>
                                </div>
                              )}
@@ -1672,7 +1698,7 @@ export default function App() {
                                    size="icon" 
                                    title="Delete" 
                                    className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                                   onClick={() => handleDelete(openedNode || selectedNode!)}
+                                   onClick={() => handleDelete(selectedNode || openedNode!)}
                                  >
                                    <Trash2 className="h-4 w-4" />
                                  </Button>
@@ -1691,11 +1717,11 @@ export default function App() {
                               <div className="space-y-4 text-xs font-medium">
                                 <div className="flex justify-between items-center py-2 border-b border-dashed">
                                   <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Type</span>
-                                  <Badge variant="secondary" className="uppercase text-[9px] h-5 font-bold tracking-widest px-2">{(openedNode || selectedNode!).type}</Badge>
+                                  <Badge variant="secondary" className="uppercase text-[9px] h-5 font-bold tracking-widest px-2">{(selectedNode || openedNode!).type}</Badge>
                                 </div>
                                 <div className="flex justify-between items-center py-2 border-b border-dashed">
                                   <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Size</span>
-                                  <span className="font-mono font-bold text-foreground">{(openedNode || selectedNode!).size || '73 Bytes'}</span>
+                                  <span className="font-mono font-bold text-foreground">{(selectedNode || openedNode!).size || '73 Bytes'}</span>
                                 </div>
                                 <div className="flex justify-between items-center py-2 border-b border-dashed">
                                   <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Created</span>
@@ -1703,7 +1729,7 @@ export default function App() {
                                 </div>
                                 <div className="flex justify-between items-center py-2 border-b border-dashed">
                                   <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Modified</span>
-                                  <span className="font-mono opacity-60">{(openedNode || selectedNode!).modifiedAt || '2026-04-18'}</span>
+                                  <span className="font-mono opacity-60">{(selectedNode || openedNode!).modifiedAt || '2026-04-18'}</span>
                                 </div>
                               </div>
                             </div>
@@ -1726,7 +1752,7 @@ export default function App() {
                             <div className="space-y-5">
                               <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.25em]">Full Path</h3>
                               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-[11px] font-mono break-all leading-relaxed shadow-inner">
-                                /app/applet/{(openedNode || selectedNode!).name}
+                                /app/applet/{(selectedNode || openedNode!).name}
                               </div>
                             </div>
                           </div>
@@ -1842,6 +1868,17 @@ export default function App() {
               <ExternalLink className="h-4 w-4" />
               <span>Open</span>
             </button>
+
+            {contextMenu.node?.name.toLowerCase().endsWith('.zip') && (
+              <button 
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+                onClick={() => handleExtract(contextMenu.node!)}
+              >
+                <Archive className="h-4 w-4" />
+                <span>Extract Here</span>
+              </button>
+            )}
+
             <Separator className="my-1" />
             
             <button 
