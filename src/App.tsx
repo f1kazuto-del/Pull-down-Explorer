@@ -94,8 +94,10 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
   
   // A folder has children to show if it is not yet loaded (assume it might have) 
   // OR if it has a non-empty children array.
+  // User requested to hide arrow if definitively empty.
   const hasChildren = isFolder && (
-    node.children === undefined ? !node.isLoaded : node.children.length > 0
+    node.hasChildren !== undefined ? node.hasChildren : 
+    (node.children === undefined ? !node.isLoaded : node.children.length > 0)
   );
 
   const parseSizeLocal = (sizeStr: string) => {
@@ -328,6 +330,7 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
 };
 
 export default function App() {
+  const [navRoot, setNavRoot] = useState<FileNode | null>(null);
   const [rootNode, setRootNode] = useState<FileNode | null>(null);
   const [viewNodeId, setViewNodeId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -506,6 +509,7 @@ export default function App() {
       if (res) {
         const data = { ...res, isLoaded: true };
         setRootNode(data);
+        setNavRoot(data);
         setViewNodeId(data.id);
         setExpandedIds(new Set([data.id]));
         setSelectedIds(new Set([data.id]));
@@ -791,38 +795,21 @@ export default function App() {
     return null;
   };
 
-  const viewNode = useMemo(() => {
-    if (!rootNode) return null;
-    if (!viewNodeId) return rootNode;
-    
-    const findNode = (node: FileNode, targetId: string): FileNode | null => {
-      if (node.id === targetId) return node;
-      if (node.children) {
-        for (const child of node.children) {
-          const found = findNode(child, targetId);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-    return findNode(rootNode, viewNodeId) || rootNode;
-  }, [rootNode, viewNodeId]);
-
   const currentViewNodes = useMemo(() => {
-    return getSortedChildren(viewNode?.children);
-  }, [viewNode, sortConfig]);
+    return getSortedChildren(rootNode?.children);
+  }, [rootNode, sortConfig]);
 
   const breadcrumbs = useMemo(() => {
-    const target = selectedNode || viewNode;
-    if (!target) return [];
-    return findPathToNode(target.id, rootNode) || [];
-  }, [selectedNode, viewNode, rootNode]);
+    const target = selectedNode || rootNode;
+    if (!target || !navRoot) return [];
+    return findPathToNode(target.id, navRoot) || [];
+  }, [selectedNode, navRoot, rootNode]);
 
   const rootBreadcrumbs = useMemo(() => {
-    if (!viewNode) return [];
-    setManualPath(viewNode.id); // Update manual path when root changes
-    return findPathToNode(viewNode.id, rootNode) || [];
-  }, [viewNode, rootNode]);
+    if (!rootNode || !navRoot) return [];
+    setManualPath(rootNode.id); // Update manual path when root changes
+    return findPathToNode(rootNode.id, navRoot) || [];
+  }, [rootNode, navRoot]);
 
   const handleSetRoot = async (node: FileNode) => {
     if (node.type !== 'folder') return;
@@ -834,39 +821,20 @@ export default function App() {
       return [node, ...filtered].slice(0, 10);
     });
 
-    // If the node is not in our tree, or we need fresh data
     const res = await fetchDirectory(node.id);
     if (res) {
       const data = { ...res, isLoaded: true };
-      if (!rootNode || !node.id.startsWith(rootNode.id)) {
-        // If we navigated outside the current tree, or it's initial load, reset tree
-        const isWin = data.id.includes(':');
-        const sep = isWin ? '\\' : '/';
-        const parts = data.id.split(sep);
-        
-        // Try to get a slightly higher root to provide context in sidebar
-        // e.g. if we are in C:\User\Downloads, let's try to load C:\User as sidebar root
-        if (parts.length > 1) {
-          const parentPath = parts.slice(0, -1).join(sep) || (isWin ? parts[0] + sep : '/');
-          const parentData = await fetchDirectory(parentPath);
-          if (parentData) {
-            setRootNode(parentData);
-          } else {
-            setRootNode(data);
-          }
-        } else {
-          setRootNode(data);
-        }
-      } else {
-        // Merge into existing tree
-        const updateTree = (n: FileNode): FileNode => {
-          if (n.id === data.id) return { ...n, ...data };
-          if (n.children) return { ...n, children: n.children.map(updateTree) };
-          return n;
-        };
-        setRootNode(updateTree(rootNode));
-      }
+      setRootNode(data);
       setViewNodeId(data.id);
+
+      // Initialize navRoot if not set
+      if (!navRoot) {
+        let rootPath = data.id.includes(':') ? data.id.split('\\')[0] + '\\' : '/';
+        if (data.id === 'PC' || data.id === 'Desktop') rootPath = data.id;
+        const rootRes = await fetchDirectory(rootPath);
+        if (rootRes) setNavRoot({ ...rootRes, isLoaded: true });
+        else setNavRoot(data);
+      }
       
       // Auto-expand parents in sidebar
       const isWin = data.id.includes(':');
@@ -883,7 +851,6 @@ export default function App() {
         return next;
       });
 
-      // Highlight in sidebar
       setSelectedIds(new Set([data.id]));
     }
     setLoading(false);
@@ -1188,11 +1155,41 @@ export default function App() {
         {/* Address Bar */}
         <div className="h-9 px-3 flex items-center gap-4 bg-white shadow-sm">
           <div className="flex items-center gap-1 border-r pr-3">
-            <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted" onClick={() => handleSetRoot({ id: '.', name: 'Root', type: 'folder', modifiedAt: '' })} title="Go to Root">
+            <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted" onClick={() => handleSetRoot({ id: 'Root', name: 'Root', type: 'folder', modifiedAt: '' })} title="Go to Root">
               <ArrowLeft className="h-3.5 w-3.5" />
             </Button>
             <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted" onClick={handleGoUp} title="Go Up One Level">
               <ArrowUp className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-1 border-r pr-3">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className={cn("h-7 px-2 text-[10px] gap-1.5", viewNodeId === 'PC' && "bg-primary/10 text-primary")}
+              onClick={() => handleSetRoot({ id: 'PC', name: 'PC', type: 'folder', modifiedAt: '' })}
+            >
+              <Monitor className="h-3.5 w-3.5" />
+              <span className="font-bold">PC</span>
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className={cn("h-7 px-2 text-[10px] gap-1.5", viewNodeId === 'Desktop' && "bg-primary/10 text-primary")}
+              onClick={() => handleSetRoot({ id: 'Desktop', name: 'Desktop', type: 'folder', modifiedAt: '' })}
+            >
+              <LayoutTemplate className="h-3.5 w-3.5" />
+              <span className="font-bold">デスクトップ</span>
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className={cn("h-7 px-2 text-[10px] gap-1.5", (viewNodeId === '.' || viewNodeId === 'Root') && "bg-primary/10 text-primary")}
+              onClick={() => handleSetRoot({ id: '.', name: 'Root', type: 'folder', modifiedAt: '' })}
+            >
+              <HardDrive className="h-3.5 w-3.5" />
+              <span className="font-bold">Root</span>
             </Button>
           </div>
 
@@ -1291,94 +1288,10 @@ export default function App() {
       </div>
 
       <div className="flex-1 flex overflow-hidden min-h-0 relative">
-        {/* Sidebar Tree */}
-        <aside 
-          className="border-r flex flex-col bg-muted/5 min-h-0 overflow-hidden shrink-0 transition-[width] duration-300 ease-in-out"
-          style={{ width: showDetailPane ? `${sidebarWidth}px` : '100%' }}
-        >
-          {/* Quick Access Sidebar */}
-          <div className="p-3 border-b bg-muted/5">
-            <h3 className="px-2 pb-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-              <Star className="h-3 w-3 text-yellow-500" />
-              お気に入り
-            </h3>
-            <div className="flex flex-row flex-wrap gap-1.5 px-1">
-              <button 
-                onClick={() => handleSetRoot({ id: 'PC', name: 'PC', type: 'folder', modifiedAt: '' })}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] transition-all group border shadow-sm",
-                  rootNode?.id === 'PC' ? "bg-primary text-primary-foreground font-bold border-primary" : "bg-white hover:bg-muted font-medium text-foreground/70 hover:text-foreground border-border"
-                )}
-                title="PC (デバイスとドライブ)"
-              >
-                <Monitor className="h-3.5 w-3.5" />
-                <span>PC</span>
-              </button>
-              <button 
-                onClick={() => handleSetRoot({ id: 'Desktop', name: 'Desktop', type: 'folder', modifiedAt: '' })}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] transition-all group border shadow-sm",
-                  rootNode?.id === 'Desktop' ? "bg-primary text-primary-foreground font-bold border-primary" : "bg-white hover:bg-muted font-medium text-foreground/70 hover:text-foreground border-border"
-                )}
-                title="デスクトップ"
-              >
-                <LayoutTemplate className="h-3.5 w-3.5" />
-                <span>デスクトップ</span>
-              </button>
-              <button 
-                onClick={() => handleSetRoot({ id: '.', name: 'Root', type: 'folder', modifiedAt: '' })}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] transition-all group border shadow-sm",
-                  rootNode?.id === '.' || rootNode?.id === '' ? "bg-primary text-primary-foreground font-bold border-primary" : "bg-white hover:bg-muted font-medium text-foreground/70 hover:text-foreground border-border"
-                )}
-                title="C: ルート"
-              >
-                <HardDrive className="h-3.5 w-3.5" />
-                <span>Root</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Recent Folders */}
-          {recentFolders.length > 0 && (
-            <div className="p-2 border-b bg-muted/20">
-              <h3 className="px-2 pb-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                <Clock className="h-3 w-3" />
-                Recent
-              </h3>
-              <div className="flex gap-2 p-1 overflow-x-auto custom-scrollbar whitespace-nowrap scroll-smooth no-scrollbar">
-                {recentFolders.map(folder => (
-                  <button
-                    key={`recent-${folder.id}`}
-                    onClick={() => handleSetRoot(folder)}
-                    onContextMenu={(e) => handleContextMenu(e, folder)}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, folder)}
-                    onDragOver={(e) => handleDragOver(e, folder)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, folder)}
-                    title={folder.name}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] transition-all group border shadow-sm shrink-0",
-                      viewNodeId === folder.id 
-                        ? "bg-primary text-primary-foreground border-primary" 
-                        : "bg-white hover:bg-muted/50 text-foreground/80 hover:text-foreground border-slate-200"
-                    )}
-                  >
-                    <Folder className={cn("h-3 w-3", viewNodeId === folder.id ? "text-white" : "text-blue-500/70")} />
-                    <span className="max-w-[120px] truncate">{folder.name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div 
-            className="flex-1 overflow-y-auto custom-scrollbar" 
-            onMouseDown={handleMiddleMouseDown}
-            onContextMenu={(e) => handleContextMenu(e, rootNode)}
-          >
-            {/* Sidebar Column Headers */}
+        {/* Main Area (Center) */}
+        <div className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden relative">
+          {/* Main List Column Headers */}
+          {!rootNode?.isPCView && (
             <div className="sticky top-0 bg-background/95 backdrop-blur-sm z-30 border-b grid grid-cols-[1fr_140px_100px_80px] text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/50 h-10 items-center px-4">
               <div 
                 className="cursor-pointer hover:text-foreground flex items-center gap-1 transition-colors"
@@ -1405,48 +1318,41 @@ export default function App() {
                 サイズ {sortConfig.key === 'size' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
               </div>
             </div>
+          )}
 
-            <div className="p-2">
-              <TreeItem
-                node={rootNode}
-                level={0}
-                selectedIds={selectedIds}
-                expandedIds={expandedIds}
-                onSelect={handleSelect}
-                onToggle={toggleExpand}
-                onDoubleClick={handleDoubleClick}
-                onContextMenu={handleContextMenu}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                dragOverId={dragOverId}
-                searchQuery={searchQuery}
-                renamingId={renamingId}
-                renamingName={renamingName}
-                setRenamingName={setRenamingName}
-                onRenameSubmit={handleRenameSubmit}
-                onRenameCancel={() => setRenamingId(null)}
-                sortConfig={sortConfig}
-              />
+          <div 
+            className="flex-1 overflow-y-auto custom-scrollbar"
+            onMouseDown={handleMiddleMouseDown}
+            onContextMenu={(e) => handleContextMenu(e, rootNode)}
+          >
+            <div className={cn(rootNode?.isPCView ? "h-full" : "p-2")}>
+              {rootNode && (
+                <TreeItem
+                  node={rootNode}
+                  level={0}
+                  selectedIds={selectedIds}
+                  expandedIds={expandedIds}
+                  onSelect={handleSelect}
+                  onToggle={toggleExpand}
+                  onDoubleClick={handleDoubleClick}
+                  onContextMenu={handleContextMenu}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  dragOverId={dragOverId}
+                  searchQuery={searchQuery}
+                  renamingId={renamingId}
+                  renamingName={renamingName}
+                  setRenamingName={setRenamingName}
+                  onRenameSubmit={handleRenameSubmit}
+                  onRenameCancel={() => setRenamingId(null)}
+                  sortConfig={sortConfig}
+                />
+              )}
             </div>
           </div>
-        </aside>
-
-        {/* Resizer Handle */}
-        {showDetailPane && (
-          <div 
-            className={cn(
-              "absolute top-0 bottom-0 w-1 cursor-col-resize z-20 hover:bg-primary/30 transition-colors",
-              isResizing && "bg-primary/50"
-            )}
-            style={{ left: `${sidebarWidth - 2}px` }}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              setIsResizing(true);
-            }}
-          />
-        )}
+        </div>
 
         {/* Main Content Area / Preview (Details Pane Style) */}
         <AnimatePresence>
@@ -1674,7 +1580,7 @@ export default function App() {
               <div className="space-y-1">
                 <p className="text-muted-foreground"># VIEW STATE</p>
                 <p><span className="text-primary">root:</span> {rootNode.id}</p>
-                <p><span className="text-primary">view:</span> {viewNode?.id}</p>
+                <p><span className="text-primary">view:</span> {rootNode?.id}</p>
                 <p><span className="text-primary">opened:</span> {openedNode?.id || 'null'}</p>
               </div>
               <div className="space-y-1">

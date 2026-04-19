@@ -55,18 +55,30 @@ async function startServer() {
         const fullPath = path.join(targetPath, entry.name);
         try {
           const entryStats = await fs.stat(fullPath);
-          const type = entry.isDirectory() ? 'folder' : 
+          const isDirectory = entry.isDirectory();
+          const type = isDirectory ? 'folder' : 
                        entry.name.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? 'image' :
                        entry.name.match(/\.(ts|tsx|js|jsx|json|css|html|md|txt)$/i) ? 'code' : 'document';
           
+          let hasChildren = false;
+          if (isDirectory) {
+            try {
+              const subEntries = await fs.readdir(fullPath);
+              hasChildren = subEntries.length > 0;
+            } catch (e) {
+              // Permission denied or other error, assume empty or inaccessible
+            }
+          }
+
           return {
             id: fullPath,
             name: entry.name,
             type,
-            size: entry.isDirectory() ? "" : formatBytes(entryStats.size),
+            size: isDirectory ? "" : formatBytes(entryStats.size),
             modifiedAt: entryStats.mtime.toISOString().split('T')[0],
-            children: entry.isDirectory() ? [] : undefined,
-            isLoaded: false
+            children: isDirectory ? [] : undefined,
+            isLoaded: false,
+            hasChildren
           };
         } catch (e) {
           return null;

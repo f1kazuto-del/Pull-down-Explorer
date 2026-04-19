@@ -14,4 +14,5 @@ export interface FileNode {
   isDrive?: boolean;
   usage?: number;
   isPCView?: boolean;
+  hasChildren?: boolean;
 }
