@@ -1038,6 +1038,11 @@ export default function App() {
     e.preventDefault();
     e.stopPropagation();
 
+    // If right-clicked node is not selected, select it (standard behavior)
+    if (!selectedIds.has(node.id)) {
+      handleSelect(node);
+    }
+
     const menuWidth = 200;
     const menuHeight = 450;
     let x = e.clientX;
@@ -1086,23 +1091,31 @@ export default function App() {
   };
 
   const handleDelete = async (node: FileNode) => {
-    if (!confirm(`Are you sure you want to delete ${node.name}?`)) return;
+    const isSelected = selectedIds.has(node.id);
+    const targets = isSelected ? Array.from(selectedIds) : [node.id];
+    const targetNames = isSelected 
+      ? `${selectedIds.size} items` 
+      : node.name;
+
+    if (!confirm(`Are you sure you want to delete ${targetNames}?`)) return;
+    
     try {
       const res = await fetch('/api/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: node.id })
+        body: JSON.stringify({ paths: targets })
       });
+      
       if (res.ok) {
-        // Clear selection if deleted
-        if (selectedIds.has(node.id)) {
-          const next = new Set(selectedIds);
-          next.delete(node.id);
-          setSelectedIds(next);
-        }
-        if (openedNode?.id === node.id) {
-          setOpenedNode(null);
-        }
+        // Clear selection or remove deleted items from selection
+        const next = new Set(selectedIds);
+        targets.forEach(id => {
+          next.delete(id);
+          if (openedNode?.id === id) {
+            setOpenedNode(null);
+          }
+        });
+        setSelectedIds(next);
         await handleRefresh();
       }
     } catch (err) {
@@ -1536,10 +1549,34 @@ export default function App() {
                     className="h-full flex flex-col items-center justify-center text-muted-foreground p-8 text-center"
                   >
                     <div className="w-20 h-20 rounded-full bg-muted/30 flex items-center justify-center mb-4">
-                      <MousePointer2 className="h-10 w-10 opacity-20" />
+                      {selectedIds.size > 1 ? (
+                        <Trash2 className="h-10 w-10 opacity-20 text-red-500" />
+                      ) : (
+                        <MousePointer2 className="h-10 w-10 opacity-20" />
+                      )}
                     </div>
-                    <h3 className="text-lg font-semibold text-foreground/50">No Selection</h3>
-                    <p className="text-sm max-w-[200px] mt-2">Select a file or folder in the sidebar to view details and metadata.</p>
+                    {selectedIds.size > 1 ? (
+                      <>
+                        <h3 className="text-lg font-semibold text-foreground/50">{selectedIds.size} items selected</h3>
+                        <p className="text-sm max-w-[200px] mt-2 mb-6">Bulk actions can be performed on the current selection.</p>
+                        <Button 
+                          variant="destructive" 
+                          className="gap-2"
+                          onClick={() => {
+                            const firstId = Array.from(selectedIds)[0] as string;
+                            handleDelete({ id: firstId, name: `${selectedIds.size} items`, type: 'folder', modifiedAt: '' });
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete Selection
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <h3 className="text-lg font-semibold text-foreground/50">No Selection</h3>
+                        <p className="text-sm max-w-[200px] mt-2">Select a file or folder in the main view to view details and metadata.</p>
+                      </>
+                    )}
                   </motion.div>
                 ) : (
                   <motion.div

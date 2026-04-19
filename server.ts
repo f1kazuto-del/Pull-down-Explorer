@@ -194,9 +194,17 @@ async function startServer() {
   // API to delete file/folder
   app.post("/api/delete", async (req, res) => {
     try {
-      const { path: targetPath } = req.body;
-      if (!targetPath) return res.status(400).json({ error: "Path is required" });
-      await fs.rm(targetPath, { recursive: true, force: true });
+      const { path: targetPath, paths } = req.body;
+      const targets = paths || (targetPath ? [targetPath] : []);
+      
+      if (targets.length === 0) {
+        return res.status(400).json({ error: "Path or paths are required" });
+      }
+
+      for (const p of targets) {
+        await fs.rm(p, { recursive: true, force: true });
+      }
+      
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
