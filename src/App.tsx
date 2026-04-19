@@ -32,6 +32,8 @@ import {
   Plus,
   FolderSearch,
   FolderOpen,
+  LayoutTemplate,
+  Monitor,
   RefreshCw,
   MousePointer2,
   Download,
@@ -57,6 +59,10 @@ const FileIcon = ({ type, className }: { type: FileType; className?: string }) =
   }
 };
 
+const DriveIcon = ({ className }: { className?: string }) => {
+  return <HardDrive className={cn("text-slate-400", className)} />;
+};
+
 interface TreeItemProps {
   key?: string;
   node: FileNode;
@@ -78,9 +84,10 @@ interface TreeItemProps {
   setRenamingName: (name: string) => void;
   onRenameSubmit: (path: string, newName: string) => void;
   onRenameCancel: () => void;
+  sortConfig: { key: string, direction: 'asc' | 'desc' };
 }
 
-const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, onDoubleClick, onContextMenu, onDragStart, onDragOver, onDragLeave, onDrop, dragOverId, searchQuery, renamingId, renamingName, setRenamingName, onRenameSubmit, onRenameCancel }: TreeItemProps) => {
+const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, onDoubleClick, onContextMenu, onDragStart, onDragOver, onDragLeave, onDrop, dragOverId, searchQuery, renamingId, renamingName, setRenamingName, onRenameSubmit, onRenameCancel, sortConfig }: TreeItemProps) => {
   const isExpanded = expandedIds.has(node.id);
   const isSelected = selectedIds.has(node.id);
   const isFolder = node.type === 'folder';
@@ -91,14 +98,99 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
     node.children === undefined ? !node.isLoaded : node.children.length > 0
   );
 
-  // Filter children if there's a search query
+  const parseSizeLocal = (sizeStr: string) => {
+    const units: Record<string, number> = { 'B': 1, 'KB': 1024, 'MB': 1024 ** 2, 'GB': 1024 ** 3, 'TB': 1024 ** 4 };
+    const match = sizeStr.match(/^([\d.]+)\s*([a-zA-Z]+)$/);
+    if (!match) return 0;
+    const value = parseFloat(match[1]);
+    const unit = match[2].toUpperCase();
+    return value * (units[unit] || 1);
+  };
+
+  // Filter and SORT children
   const visibleChildren = useMemo(() => {
-    if (!searchQuery) return node.children || [];
-    return (node.children || []).filter(child => 
-      child.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (child.type === 'folder' && child.children?.some(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())))
+    let base = node.children || [];
+    if (searchQuery) {
+      base = base.filter(child => 
+        child.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (child.type === 'folder' && child.children?.some(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())))
+      );
+    }
+
+    return [...base].sort((a, b) => {
+      // Folders always first for Name/Type sorting
+      if (sortConfig.key === 'name' || sortConfig.key === 'type') {
+        if (a.type === 'folder' && b.type !== 'folder') return -1;
+        if (a.type !== 'folder' && b.type === 'folder') return 1;
+      }
+
+      let valA: any = a[sortConfig.key as keyof FileNode] || '';
+      let valB: any = b[sortConfig.key as keyof FileNode] || '';
+
+      if (sortConfig.key === 'size') {
+        valA = parseSizeLocal(a.size || '0');
+        valB = parseSizeLocal(b.size || '0');
+      } else if (typeof valA === 'string') {
+        valA = valA.toLowerCase();
+        valB = valB.toLowerCase();
+      }
+
+      if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [node.children, searchQuery, sortConfig]);
+
+  if (node.isPCView) {
+    return (
+      <div className="p-8 w-full max-w-7xl mx-auto overflow-y-auto">
+        <div className="flex items-center gap-3 mb-8 pb-4 border-b">
+          <div className="p-2 rounded-xl bg-primary/10">
+            <Monitor className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-foreground uppercase tracking-[0.1em]">デバイスとドライブ</h3>
+            <p className="text-[10px] font-bold text-muted-foreground opacity-60">Connected storage devices and network locations</p>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {visibleChildren.map(child => (
+            <div 
+              key={child.id}
+              className={cn(
+                "flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/50 cursor-pointer transition-all group relative bg-white shadow-sm min-w-[240px]",
+                selectedIds.has(child.id) && "ring-2 ring-primary border-primary bg-primary/5 shadow-md"
+              )}
+              onClick={(e) => onSelect(child, e.ctrlKey || e.metaKey, e.shiftKey)}
+              onDoubleClick={() => onDoubleClick(child)}
+              onContextMenu={(e) => onContextMenu(e, child)}
+            >
+              <div className="p-2.5 bg-slate-50 rounded-lg group-hover:bg-primary/10 transition-colors shrink-0">
+                <HardDrive className="h-8 w-8 text-slate-400 group-hover:text-primary transition-colors" />
+              </div>
+              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                <div className="font-bold text-sm text-foreground truncate mb-1.5" title={child.name}>{child.name}</div>
+                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden mb-2">
+                  <div 
+                    className={cn(
+                      "h-full transition-all duration-700",
+                      (child.usage || 0) > 85 ? "bg-red-500" : "bg-primary"
+                    )} 
+                    style={{ width: `${child.usage || 0}%` }} 
+                  />
+                </div>
+                <div className="flex justify-between items-center text-[10px] font-bold text-muted-foreground/70 tabular-nums">
+                  <span>{child.size} / {child.totalSize}</span>
+                  <span className={cn((child.usage || 0) > 85 && "text-red-500")}>{child.usage}%</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     );
-  }, [node.children, searchQuery]);
+  }
 
   // If searching and this folder has no matching children and doesn't match itself, hide it
   if (searchQuery && !node.name.toLowerCase().includes(searchQuery.toLowerCase()) && visibleChildren.length === 0) {
@@ -225,6 +317,7 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
                 setRenamingName={setRenamingName}
                 onRenameSubmit={onRenameSubmit}
                 onRenameCancel={onRenameCancel}
+                sortConfig={sortConfig}
               />
             ))}
           </motion.div>
@@ -543,9 +636,9 @@ export default function App() {
     return findNode(rootNode, id);
   }, [selectedIds, rootNode]);
 
-  const handleDoubleClick = (node: FileNode) => {
+  const handleDoubleClick = async (node: FileNode) => {
     if (node.type === 'folder') {
-      handleSetRoot(node);
+      await handleSetRoot(node);
       // Auto-expand in sidebar
       setExpandedIds(prev => new Set([...prev, node.id]));
     } else {
@@ -576,32 +669,41 @@ export default function App() {
   const handleRefresh = async () => {
     if (!rootNode) return;
     
-    // We want to refresh the root node and all currently expanded folders to maintain the tree state
-    const refreshNode = async (node: FileNode): Promise<FileNode> => {
-      // Always refresh the node if it's the root or if it's expanded
-      if (node.id === rootNode.id || expandedIds.has(node.id)) {
-        const fresh = await fetchDirectory(node.id);
-        if (fresh) {
-          const nodeWithLoaded = { ...fresh, isLoaded: true };
-          if (node.children && nodeWithLoaded.children) {
-            // If we had children before, we need to preserve their expanded states
-            nodeWithLoaded.children = await Promise.all(
-              nodeWithLoaded.children.map(async (child) => {
-                if (child.type === 'folder' && expandedIds.has(child.id)) {
-                  return refreshNode(child);
-                }
-                return child;
-              })
-            );
+    setLoading(true);
+    try {
+      if (rootNode.id === 'PC') {
+        const fresh = await fetchDirectory('PC');
+        if (fresh) setRootNode({ ...fresh, isLoaded: true });
+      } else {
+        const refreshNode = async (node: FileNode): Promise<FileNode> => {
+          if (node.id === rootNode.id || expandedIds.has(node.id)) {
+            const fresh = await fetchDirectory(node.id);
+            if (fresh) {
+              const nodeWithLoaded = { ...fresh, isLoaded: true };
+              if (node.children && nodeWithLoaded.children) {
+                nodeWithLoaded.children = await Promise.all(
+                  nodeWithLoaded.children.map(async (child) => {
+                    if (child.type === 'folder' && expandedIds.has(child.id)) {
+                      return refreshNode(child);
+                    }
+                    return child;
+                  })
+                );
+              }
+              return nodeWithLoaded;
+            }
           }
-          return nodeWithLoaded;
-        }
+          return node;
+        };
+        const newRoot = await refreshNode(rootNode);
+        setRootNode(newRoot);
       }
-      return node;
-    };
-
-    const newRoot = await refreshNode(rootNode);
-    setRootNode(newRoot);
+    } catch (err) {
+      console.error("Refresh failed:", err);
+    } finally {
+      // Small delay for psychological feedback and ensuring state batches
+      setTimeout(() => setLoading(false), 300);
+    }
   };
 
   // Keyboard shortcuts for navigation
@@ -862,7 +964,16 @@ export default function App() {
         body: JSON.stringify({ path: node.id })
       });
       if (res.ok) {
-        handleRefresh();
+        // Clear selection if deleted
+        if (selectedIds.has(node.id)) {
+          const next = new Set(selectedIds);
+          next.delete(node.id);
+          setSelectedIds(next);
+        }
+        if (openedNode?.id === node.id) {
+          setOpenedNode(null);
+        }
+        await handleRefresh();
       }
     } catch (err) {
       console.error(err);
@@ -878,7 +989,15 @@ export default function App() {
         body: JSON.stringify({ parentPath })
       });
       if (res.ok) {
-        handleRefresh();
+        const data = await res.json();
+        // Ensure Desktop exists if we just navigated to it
+        // Auto expand parent
+        setExpandedIds(prev => new Set([...prev, parentPath]));
+        await handleRefresh();
+        // Focus new folder
+        if (data.path) {
+          setSelectedIds(new Set([data.path]));
+        }
       }
     } catch (err) {
       console.error(err);
@@ -1175,35 +1294,83 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden min-h-0 relative">
         {/* Sidebar Tree */}
         <aside 
-          className="border-r flex flex-col bg-muted/5 min-h-0 overflow-hidden shrink-0"
-          style={{ width: `${sidebarWidth}px` }}
+          className="border-r flex flex-col bg-muted/5 min-h-0 overflow-hidden shrink-0 transition-[width] duration-300 ease-in-out"
+          style={{ width: showDetailPane ? `${sidebarWidth}px` : '100%' }}
         >
+          {/* Quick Access Sidebar */}
+          <div className="p-3 border-b bg-muted/5">
+            <h3 className="px-2 pb-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+              <Star className="h-3 w-3 text-yellow-500" />
+              お気に入り
+            </h3>
+            <div className="flex flex-row flex-wrap gap-1.5 px-1">
+              <button 
+                onClick={() => handleSetRoot({ id: 'PC', name: 'PC', type: 'folder', modifiedAt: '' })}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] transition-all group border shadow-sm",
+                  rootNode?.id === 'PC' ? "bg-primary text-primary-foreground font-bold border-primary" : "bg-white hover:bg-muted font-medium text-foreground/70 hover:text-foreground border-border"
+                )}
+                title="PC (デバイスとドライブ)"
+              >
+                <Monitor className="h-3.5 w-3.5" />
+                <span>PC</span>
+              </button>
+              <button 
+                onClick={() => handleSetRoot({ id: 'Desktop', name: 'Desktop', type: 'folder', modifiedAt: '' })}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] transition-all group border shadow-sm",
+                  rootNode?.id === 'Desktop' ? "bg-primary text-primary-foreground font-bold border-primary" : "bg-white hover:bg-muted font-medium text-foreground/70 hover:text-foreground border-border"
+                )}
+                title="デスクトップ"
+              >
+                <LayoutTemplate className="h-3.5 w-3.5" />
+                <span>デスクトップ</span>
+              </button>
+              <button 
+                onClick={() => handleSetRoot({ id: '.', name: 'Root', type: 'folder', modifiedAt: '' })}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] transition-all group border shadow-sm",
+                  rootNode?.id === '.' || rootNode?.id === '' ? "bg-primary text-primary-foreground font-bold border-primary" : "bg-white hover:bg-muted font-medium text-foreground/70 hover:text-foreground border-border"
+                )}
+                title="C: ルート"
+              >
+                <HardDrive className="h-3.5 w-3.5" />
+                <span>Root</span>
+              </button>
+            </div>
+          </div>
+
           {/* Recent Folders */}
           {recentFolders.length > 0 && (
-            <div className="p-2 border-b">
+            <div className="p-2 border-b bg-muted/20">
               <h3 className="px-2 pb-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <Clock className="h-3 w-3" />
                 Recent
               </h3>
-              {recentFolders.map(folder => (
-                <button
-                  key={`recent-${folder.id}`}
-                  onClick={() => handleSetRoot(folder)}
-                  onContextMenu={(e) => handleContextMenu(e, folder)}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, folder)}
-                  onDragOver={(e) => handleDragOver(e, folder)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, folder)}
-                  className={cn(
-                    "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-all group",
-                    viewNodeId === folder.id ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50 text-foreground/80 hover:text-foreground"
-                  )}
-                >
-                  <Folder className="h-3.5 w-3.5 text-blue-500/70" />
-                  <span className="truncate flex-1 text-left">{folder.name}</span>
-                </button>
-              ))}
+              <div className="flex gap-2 p-1 overflow-x-auto custom-scrollbar whitespace-nowrap scroll-smooth no-scrollbar">
+                {recentFolders.map(folder => (
+                  <button
+                    key={`recent-${folder.id}`}
+                    onClick={() => handleSetRoot(folder)}
+                    onContextMenu={(e) => handleContextMenu(e, folder)}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, folder)}
+                    onDragOver={(e) => handleDragOver(e, folder)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, folder)}
+                    title={folder.name}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] transition-all group border shadow-sm shrink-0",
+                      viewNodeId === folder.id 
+                        ? "bg-primary text-primary-foreground border-primary" 
+                        : "bg-white hover:bg-muted/50 text-foreground/80 hover:text-foreground border-slate-200"
+                    )}
+                  >
+                    <Folder className={cn("h-3 w-3", viewNodeId === folder.id ? "text-white" : "text-blue-500/70")} />
+                    <span className="max-w-[120px] truncate">{folder.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -1214,12 +1381,30 @@ export default function App() {
           >
             {/* Sidebar Column Headers */}
             <div className="sticky top-0 bg-background/95 backdrop-blur-sm z-30 border-b grid grid-cols-[1fr_140px_100px_80px] text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/50 h-10 items-center px-4">
-              <div>名前</div>
-              <div className="px-3 border-l border-border/10 flex items-center gap-1">
-                更新日時 <ChevronDown className="h-2 w-2" />
+              <div 
+                className="cursor-pointer hover:text-foreground flex items-center gap-1 transition-colors"
+                onClick={() => setSortConfig(s => ({ key: 'name', direction: s.key === 'name' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+              >
+                名前 {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
               </div>
-              <div className="px-3 border-l border-border/10">種類</div>
-              <div className="px-3 border-l border-border/10 text-right">サイズ</div>
+              <div 
+                className="px-3 border-l border-border/10 flex items-center gap-1 cursor-pointer hover:text-foreground h-full transition-colors"
+                onClick={() => setSortConfig(s => ({ key: 'modifiedAt', direction: s.key === 'modifiedAt' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+              >
+                更新日時 {sortConfig.key === 'modifiedAt' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </div>
+              <div 
+                className="px-3 border-l border-border/10 cursor-pointer hover:text-foreground h-full flex items-center transition-colors"
+                onClick={() => setSortConfig(s => ({ key: 'type', direction: s.key === 'type' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+              >
+                種類 {sortConfig.key === 'type' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </div>
+              <div 
+                className="px-3 border-l border-border/10 text-right cursor-pointer hover:text-foreground h-full flex items-center justify-end transition-colors"
+                onClick={() => setSortConfig(s => ({ key: 'size', direction: s.key === 'size' && s.direction === 'asc' ? 'desc' : 'asc' }))}
+              >
+                サイズ {sortConfig.key === 'size' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+              </div>
             </div>
 
             <div className="p-2">
@@ -1243,23 +1428,26 @@ export default function App() {
                 setRenamingName={setRenamingName}
                 onRenameSubmit={handleRenameSubmit}
                 onRenameCancel={() => setRenamingId(null)}
+                sortConfig={sortConfig}
               />
             </div>
           </div>
         </aside>
 
         {/* Resizer Handle */}
-        <div 
-          className={cn(
-            "absolute top-0 bottom-0 w-1 cursor-col-resize z-20 hover:bg-primary/30 transition-colors",
-            isResizing && "bg-primary/50"
-          )}
-          style={{ left: `${sidebarWidth - 2}px` }}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            setIsResizing(true);
-          }}
-        />
+        {showDetailPane && (
+          <div 
+            className={cn(
+              "absolute top-0 bottom-0 w-1 cursor-col-resize z-20 hover:bg-primary/30 transition-colors",
+              isResizing && "bg-primary/50"
+            )}
+            style={{ left: `${sidebarWidth - 2}px` }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsResizing(true);
+            }}
+          />
+        )}
 
         {/* Main Content Area / Preview (Details Pane Style) */}
         <AnimatePresence>
@@ -1374,7 +1562,13 @@ export default function App() {
                               </Button>
                               <div className="flex items-center gap-4 mt-2 px-2">
                                  <Button variant="ghost" size="icon" title="Properties" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
-                                 <Button variant="ghost" size="icon" title="Delete" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-500/10">
+                                 <Button 
+                                   variant="ghost" 
+                                   size="icon" 
+                                   title="Delete" 
+                                   className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                                   onClick={() => handleDelete(openedNode || selectedNode!)}
+                                 >
                                    <Trash2 className="h-4 w-4" />
                                  </Button>
                               </div>
@@ -1517,8 +1711,58 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-3 py-1.5 border-b mb-1">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase truncate">{contextMenu.node?.name}</p>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase truncate">{contextMenu.node?.name || 'File System'}</p>
             </div>
+            
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+              onClick={() => {
+                if (contextMenu.node) addBookmark(contextMenu.node);
+                setContextMenu(null);
+              }}
+            >
+              <Star className="h-4 w-4 text-yellow-500 fill-yellow-500/20" />
+              <span>Add to Bookmarks</span>
+            </button>
+            <Separator className="my-1" />
+
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+              onClick={() => {
+                if (contextMenu.node) handleCopy(contextMenu.node);
+              }}
+            >
+              <Copy className="h-4 w-4" />
+              <span>Copy</span>
+              <span className="ml-auto text-[10px] text-muted-foreground mr-1">Ctrl+C</span>
+            </button>
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+              onClick={() => {
+                if (contextMenu.node) handleCut(contextMenu.node);
+              }}
+            >
+              <Scissors className="h-4 w-4" />
+              <span>Cut</span>
+              <span className="ml-auto text-[10px] text-muted-foreground mr-1">Ctrl+X</span>
+            </button>
+            <button 
+              className={cn(
+                "w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left",
+                (!clipboard || (contextMenu.node && contextMenu.node.type !== 'folder')) && "opacity-50 cursor-not-allowed"
+              )}
+              disabled={!clipboard || (contextMenu.node && contextMenu.node.type !== 'folder')}
+              onClick={() => {
+                handlePaste(contextMenu.node);
+                setContextMenu(null);
+              }}
+            >
+              <Plus className="h-4 w-4 rotate-45" />
+              <span>Paste</span>
+              <span className="ml-auto text-[10px] text-muted-foreground mr-1">Ctrl+V</span>
+            </button>
+            <Separator className="my-1" />
+
             <button 
               className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
               onClick={() => {
@@ -1542,6 +1786,16 @@ export default function App() {
               <FileText className="h-4 w-4" />
               <span>Rename</span>
               <span className="ml-auto text-[10px] text-muted-foreground mr-1">F2</span>
+            </button>
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-red-500/10 text-red-500 text-left"
+              onClick={() => {
+                if (contextMenu.node) handleDelete(contextMenu.node);
+                setContextMenu(null);
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Delete</span>
             </button>
             <Separator className="my-1" />
             <button 

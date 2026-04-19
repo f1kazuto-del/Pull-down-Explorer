@@ -19,6 +19,30 @@ async function startServer() {
   app.get("/api/files", async (req, res) => {
     try {
       const targetPath = (req.query.path as string) || process.cwd();
+      
+      // Ensure specific paths exist to avoid errors
+      if (targetPath.endsWith('Desktop')) {
+        await fs.mkdir(targetPath, { recursive: true }).catch(() => {});
+      }
+
+      // Virtual "PC" view
+      if (targetPath === "PC") {
+        return res.json({
+          id: "PC",
+          name: "PC",
+          type: "folder",
+          isLoaded: true,
+          isPCView: true,
+          children: [
+            { id: "C:", name: "Windows (C:)", type: "folder", size: "457.2 GB", totalSize: "905.1 GB", usage: 50, isDrive: true, modifiedAt: "2026-04-18" },
+            { id: "D:", name: "Data (D:)", type: "folder", size: "762.4 GB", totalSize: "1.81 TB", usage: 58, isDrive: true, modifiedAt: "2026-04-18" },
+            { id: "E:", name: "DVD Drive (E:)", type: "folder", size: "0 B", totalSize: "5.16 GB", usage: 0, isDrive: true, modifiedAt: "2026-04-18" },
+            { id: "F:", name: "Backup (F:)", type: "folder", size: "755.1 MB", totalSize: "1.35 GB", usage: 55, isDrive: true, modifiedAt: "2026-04-18" },
+            { id: "/", name: "Root (/)", type: "folder", size: "200.5 GB", totalSize: "500.0 GB", usage: 40, isDrive: true, modifiedAt: "2026-04-18" }
+          ]
+        });
+      }
+
       const stats = await fs.stat(targetPath);
 
       if (!stats.isDirectory()) {
@@ -173,12 +197,15 @@ async function startServer() {
       const { parentPath } = req.body;
       if (!parentPath) return res.status(400).json({ error: "Parent path is required" });
       
-      let folderName = "New Folder";
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}_${String(now.getDate()).padStart(2, '0')}`;
+      
+      let folderName = dateStr;
       let targetPath = path.join(parentPath, folderName);
       
       let counter = 1;
       while (await fileExists(targetPath)) {
-        folderName = `New Folder (${counter})`;
+        folderName = `${dateStr} (${counter})`;
         targetPath = path.join(parentPath, folderName);
         counter++;
       }

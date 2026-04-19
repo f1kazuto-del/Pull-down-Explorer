@@ -5,9 +5,13 @@ export interface FileNode {
   name: string;
   type: FileType;
   size?: string;
+  totalSize?: string;
   modifiedAt: string;
   children?: FileNode[];
   content?: string;
   imageUrl?: string;
   isLoaded?: boolean;
+  isDrive?: boolean;
+  usage?: number;
+  isPCView?: boolean;
 }
