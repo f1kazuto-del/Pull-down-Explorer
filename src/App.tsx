@@ -143,9 +143,9 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
 
   if (node.isPCView) {
     return (
-      <div className="p-8 w-full max-w-7xl mx-auto overflow-y-auto">
-        <div className="flex items-center gap-3 mb-8 pb-4 border-b">
-          <div className="p-2 rounded-xl bg-primary/10">
+      <div className="p-6 h-full overflow-y-auto bg-slate-50/30">
+        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
+          <div className="p-2.5 rounded-xl bg-primary/10">
             <Monitor className="h-5 w-5 text-primary" />
           </div>
           <div>
@@ -154,12 +154,12 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
           </div>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5">
           {visibleChildren.map(child => (
             <div 
               key={child.id}
               className={cn(
-                "flex items-center gap-4 p-4 border rounded-xl hover:bg-muted/50 cursor-pointer transition-all group relative bg-white shadow-sm min-w-[240px]",
+                "flex items-center gap-4 p-4 border rounded-xl hover:bg-slate-50 cursor-pointer transition-all group relative bg-white shadow-sm border-slate-200/60",
                 selectedIds.has(child.id) && "ring-2 ring-primary border-primary bg-primary/5 shadow-md"
               )}
               onClick={(e) => onSelect(child, e.ctrlKey || e.metaKey, e.shiftKey)}
@@ -1088,43 +1088,43 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden font-sans">
       {/* Header */}
-      <header className="h-14 border-b flex items-center justify-between px-4 bg-card/50 backdrop-blur-md z-10">
+      <header className="h-12 border-b flex items-center justify-between px-4 bg-card/50 backdrop-blur-md z-10 shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 mr-2 border-r pr-4 font-mono">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <FolderSearch className="h-5 w-5 text-primary" />
+            <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <FolderSearch className="h-4 w-4 text-primary" />
             </div>
-            <span className="font-bold tracking-tight hidden lg:inline-block whitespace-nowrap">PULL-DOWN EXPLORER</span>
+            <span className="font-bold tracking-tight hidden lg:inline-block whitespace-nowrap text-xs">PULL-DOWN EXPLORER</span>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative w-64 group">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+          <div className="flex items-center gap-2">
+            <div className="relative w-56 group">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
               <Input 
                 placeholder="Search files..." 
-                className="pl-9 h-8 bg-muted/50 border-none focus-visible:ring-1 focus-visible:ring-primary"
+                className="pl-8 h-7 text-xs bg-muted/40 border-none focus-visible:ring-1 focus-visible:ring-primary/30"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             
-            <Separator orientation="vertical" className="h-6" />
+            <Separator orientation="vertical" className="h-5" />
             
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5">
               <Button 
                 variant={viewMode === 'grid' ? 'secondary' : 'ghost'} 
                 size="icon" 
-                className="h-8 w-8"
+                className="h-7 w-7"
                 onClick={() => setViewMode('grid')}
               >
-                <LayoutGrid className="h-4 w-4" />
+                <LayoutGrid className="h-3.5 w-3.5" />
               </Button>
               <Button 
                 variant={viewMode === 'list' ? 'secondary' : 'ghost'} 
                 size="icon" 
-                className="h-8 w-8"
+                className="h-7 w-7"
                 onClick={() => setViewMode('list')}
               >
-                <List className="h-4 w-4" />
+                <List className="h-3.5 w-3.5" />
               </Button>
             </div>
           </div>
@@ -1145,9 +1145,9 @@ export default function App() {
       {/* Bookmarks & Path Bar */}
       <div className="flex flex-col bg-muted/5 border-b shrink-0">
         {/* Bookmarks Bar */}
-        <div className="h-10 px-6 flex items-center gap-3 overflow-x-auto scrollbar-hide border-b bg-white group">
-          <Star className="h-3.5 w-3.5 text-muted-foreground shrink-0 opacity-50" />
-          {bookmarks.length === 0 && <span className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] font-bold">No bookmarks</span>}
+        <div className="h-8 px-5 flex items-center gap-3 overflow-x-auto scrollbar-hide border-b bg-white group shadow-inner">
+          <Star className="h-3 w-3 text-muted-foreground shrink-0 opacity-50" />
+          {bookmarks.length === 0 && <span className="text-[9px] text-muted-foreground uppercase tracking-[0.2em] font-bold">No bookmarks</span>}
           {bookmarks.map(b => (
             <div key={b.node.id} className="flex items-center gap-0.5 shrink-0">
               {renamingBookmarkId === b.node.id ? (
@@ -1157,7 +1157,7 @@ export default function App() {
                 >
                   <Input 
                     autoFocus
-                    className="h-6 py-0 px-2 text-xs w-24 bg-background"
+                    className="h-6 py-0 px-2 text-[10px] w-24 bg-background"
                     value={renamingBookmarkName}
                     onChange={(e) => setRenamingBookmarkName(e.target.value)}
                     onBlur={() => updateBookmarkAlias(b.node.id, renamingBookmarkName)}
@@ -1168,7 +1168,7 @@ export default function App() {
                   variant="ghost" 
                   size="sm" 
                   className={cn(
-                    "h-7 px-2 text-xs gap-1.5 hover:bg-muted font-medium",
+                    "h-6 px-2 text-[10px] gap-1.5 hover:bg-muted font-medium",
                     viewNodeId === b.node.id && "bg-primary/10 text-primary"
                   )}
                   onClick={() => handleSetRoot(b.node)}
@@ -1177,7 +1177,7 @@ export default function App() {
                     setContextMenu({ x: e.clientX, y: e.clientY, node: b.node });
                   }}
                 >
-                  <Folder className="h-3 w-3 opacity-70" />
+                  <Folder className="h-2.5 w-2.5 opacity-70" />
                   {b.alias || b.node.name}
                 </Button>
               )}
@@ -1186,13 +1186,13 @@ export default function App() {
         </div>
 
         {/* Address Bar */}
-        <div className="h-12 px-4 flex items-center gap-4 bg-white">
-          <div className="flex items-center gap-1 border-r pr-4">
-            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted" onClick={() => handleSetRoot({ id: '', name: '', type: 'folder', modifiedAt: '' })} title="Go to Root">
-              <ArrowLeft className="h-4 w-4" />
+        <div className="h-9 px-3 flex items-center gap-4 bg-white shadow-sm">
+          <div className="flex items-center gap-1 border-r pr-3">
+            <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted" onClick={() => handleSetRoot({ id: '.', name: 'Root', type: 'folder', modifiedAt: '' })} title="Go to Root">
+              <ArrowLeft className="h-3.5 w-3.5" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted" onClick={handleGoUp} title="Go Up One Level">
-              <ArrowUp className="h-4 w-4" />
+            <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted" onClick={handleGoUp} title="Go Up One Level">
+              <ArrowUp className="h-3.5 w-3.5" />
             </Button>
           </div>
 
@@ -1205,26 +1205,26 @@ export default function App() {
                   onChange={(e) => setManualPath(e.target.value)}
                   onBlur={() => setIsEditingPath(false)}
                   onKeyDown={(e) => e.key === 'Escape' && setIsEditingPath(false)}
-                  className="h-9 py-0 px-3 text-sm bg-muted/20 border rounded-lg focus-visible:ring-1 focus-visible:ring-primary/20"
+                  className="h-7 py-0 px-3 text-[11px] bg-muted/20 border rounded-lg focus-visible:ring-1 focus-visible:ring-primary/20"
                 />
               </form>
             ) : (
               <div 
-                className="flex items-center gap-2 text-sm font-medium text-muted-foreground overflow-hidden cursor-text group px-2 py-1.5 rounded-lg hover:bg-muted/30 transition-colors"
+                className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground overflow-hidden cursor-text group px-1 py-0.5 rounded-lg hover:bg-muted/10 transition-colors"
                 onClick={() => setIsEditingPath(true)}
               >
                 <div 
-                  className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-muted transition-colors cursor-pointer"
-                  onClick={(e) => { e.stopPropagation(); handleSetRoot({ id: '/', name: '', type: 'folder', modifiedAt: '' }); }}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted transition-colors cursor-pointer"
+                  onClick={(e) => { e.stopPropagation(); handleSetRoot({ id: '.', name: 'Root', type: 'folder', modifiedAt: '' }); }}
                 >
-                  <HardDrive className="h-4 w-4 shrink-0 text-slate-400" />
+                  <HardDrive className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                   <span className="shrink-0 font-bold text-foreground">Root</span>
                 </div>
                 {rootBreadcrumbs.map((node, i) => (
                   <div 
                     key={node.id} 
                     className={cn(
-                      "flex items-center gap-2 shrink-0 px-2 py-1 rounded-md transition-colors",
+                      "flex items-center gap-1.5 shrink-0 px-1.5 py-0.5 rounded transition-colors",
                       dragOverId === node.id && "bg-primary/20 ring-1 ring-primary/30"
                     )}
                     onDragOver={(e) => handleDragOver(e, node)}
@@ -1236,11 +1236,11 @@ export default function App() {
                     }}
                   >
                     <ChevronRight className="h-3 w-3 opacity-30 shrink-0" />
-                    <Folder className="h-4 w-4 shrink-0 text-slate-400" />
+                    <Folder className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                     <span 
                       className={cn(
-                        "truncate max-w-[200px] cursor-pointer hover:text-foreground",
-                        i === rootBreadcrumbs.length - 1 ? "text-foreground font-black border-b-2 border-primary pb-0.5" : "text-muted-foreground"
+                        "truncate max-w-[120px] cursor-pointer hover:text-foreground",
+                        i === rootBreadcrumbs.length - 1 ? "text-foreground font-bold border-b-2 border-primary/50" : "text-muted-foreground"
                       )}
                     >
                       {node.name || 'Root'}
@@ -1251,12 +1251,12 @@ export default function App() {
             )}
           </div>
 
-          <div className="flex items-center gap-3 shrink-0 uppercase font-black text-[10px] tracking-widest text-muted-foreground">
-            <span className="mr-1">Sort:</span>
+          <div className="flex items-center gap-2 shrink-0 uppercase font-black text-[9px] tracking-widest text-muted-foreground/70">
+            <span className="mr-0.5">Sort:</span>
             <Button
               variant={sortConfig.key === 'name' ? 'secondary' : 'ghost'}
               size="sm"
-              className="h-8 text-[11px] px-3 font-bold bg-white border border-slate-200 shadow-sm"
+              className="h-7 text-[9px] px-2.5 font-bold bg-white border border-slate-200 shadow-sm"
               onClick={() => setSortConfig(s => ({ key: 'name', direction: s.key === 'name' && s.direction === 'asc' ? 'desc' : 'asc' }))}
             >
               Name {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
@@ -1264,7 +1264,7 @@ export default function App() {
             <Button
               variant={sortConfig.key === 'modifiedAt' ? 'secondary' : 'ghost'}
               size="sm"
-              className="h-8 text-[11px] px-3 font-bold bg-white border border-slate-200 shadow-sm"
+              className="h-7 text-[9px] px-2.5 font-bold bg-white border border-slate-200 shadow-sm"
               onClick={() => setSortConfig(s => ({ key: 'modifiedAt', direction: s.key === 'modifiedAt' && s.direction === 'asc' ? 'desc' : 'asc' }))}
             >
               Data
@@ -1272,20 +1272,19 @@ export default function App() {
             <Button
               variant={sortConfig.key === 'size' ? 'secondary' : 'ghost'}
               size="sm"
-              className="h-8 text-[11px] px-3 font-bold bg-white border border-slate-200 shadow-sm"
+              className="h-7 text-[9px] px-2.5 font-bold bg-white border border-slate-200 shadow-sm"
               onClick={() => setSortConfig(s => ({ key: 'size', direction: s.key === 'size' && s.direction === 'asc' ? 'desc' : 'asc' }))}
             >
               Size
             </Button>
-            <Separator orientation="vertical" className="h-4 mx-1" />
+            <Separator orientation="vertical" className="h-4 mx-0.5" />
             <Button
               variant="ghost"
               size="icon"
-              className={cn("h-8 w-8", !showDetailPane && "text-primary bg-primary/10")}
+              className={cn("h-7 w-7", !showDetailPane && "text-primary bg-primary/10")}
               onClick={() => setShowDetailPane(prev => !prev)}
-              title={showDetailPane ? "Hide Detail Pane (Ctrl+Alt+P)" : "Show Detail Pane (Ctrl+Alt+P)"}
             >
-              {showDetailPane ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+              {showDetailPane ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
             </Button>
           </div>
         </div>
