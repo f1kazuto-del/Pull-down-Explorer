@@ -39,7 +39,10 @@ import {
   Download,
   Type,
   PanelRightClose,
-  PanelRightOpen
+  PanelRightOpen,
+  Maximize2,
+  Minimize2,
+  X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -61,6 +64,133 @@ const FileIcon = ({ type, className }: { type: FileType; className?: string }) =
 
 const DriveIcon = ({ className }: { className?: string }) => {
   return <HardDrive className={cn("text-slate-400", className)} />;
+};
+
+const FileSoftwareView = ({ node, onClose }: { node: FileNode; onClose: () => void }) => {
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className={cn(
+        "fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-12",
+        !isMaximized && "bg-black/80 backdrop-blur-sm",
+        isMaximized && "p-0"
+      )}
+      onClick={onClose}
+    >
+      <motion.div
+        layout
+        className={cn(
+          "bg-background rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-border/50",
+          !isMaximized && "w-full max-w-6xl h-full max-h-[90vh]",
+          isMaximized && "w-full h-full rounded-none"
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* App Header */}
+        <div className="h-14 border-b bg-muted/20 px-4 flex items-center justify-between shrink-0 select-none">
+          <div className="flex items-center gap-4">
+            <div className="p-2 bg-primary/10 rounded-xl">
+              <FileIcon type={node.type} className="h-5 w-5" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold truncate max-w-[300px] leading-tight">{node.name}</span>
+              <span className="text-[10px] text-muted-foreground opacity-60 uppercase tracking-widest font-black">
+                {node.type} Viewer
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:bg-muted" onClick={() => setIsMaximized(!isMaximized)}>
+              {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
+            <Button variant="ghost" size="icon" className="h-9 w-9 text-foreground hover:bg-red-500 hover:text-white transition-colors" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Content Area */}
+        <div className="flex-1 overflow-hidden relative bg-[#0a0a0a] flex items-center justify-center">
+          {node.imageUrl ? (
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="w-full h-full flex items-center justify-center p-8"
+            >
+              <img 
+                src={node.imageUrl} 
+                alt={node.name}
+                className="max-w-full max-h-full object-contain shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)] rounded-sm"
+                referrerPolicy="no-referrer"
+              />
+            </motion.div>
+          ) : node.content ? (
+            <div className="w-full h-full bg-white p-8 overflow-auto font-mono text-sm leading-relaxed custom-scrollbar">
+              <div className="max-w-4xl mx-auto py-12">
+                <div className="mb-10 pb-6 border-b">
+                  <h1 className="text-3xl font-bold mb-2 text-foreground">{node.name}</h1>
+                  <div className="flex items-center gap-3 text-[10px] text-muted-foreground font-black uppercase tracking-[0.2em] opacity-60">
+                    <span>Type: {node.type}</span>
+                    <Separator orientation="vertical" className="h-3" />
+                    <span>Size: {node.size || 'Unknown'}</span>
+                    <Separator orientation="vertical" className="h-3" />
+                    <span>Path: {node.id}</span>
+                  </div>
+                </div>
+                <div className="whitespace-pre-wrap text-[#333] selection:bg-primary/20">{node.content}</div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-8 text-muted-foreground max-w-sm text-center">
+              <div className="relative">
+                <div className="w-28 h-28 rounded-[2.5rem] bg-muted/10 flex items-center justify-center">
+                  <FileIcon type={node.type} className="h-14 w-14 opacity-20" />
+                </div>
+                <div className="absolute -bottom-2 -right-2 bg-red-500 text-white rounded-full p-2 shadow-lg">
+                  <X className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <h3 className="font-black text-foreground tracking-[0.3em] uppercase text-[10px]">No Viewer Available</h3>
+                <p className="text-xs leading-relaxed opacity-60">The "PULL-DOWN EXPLORER" standard viewer does not support this specific file format yet.</p>
+              </div>
+              <Button variant="outline" size="sm" className="gap-3 px-8 h-12 rounded-full font-black uppercase tracking-widest text-[10px] border-border transform active:scale-95 transition-transform" onClick={onClose}>
+                Return to Workspace
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Status Bar */}
+        <div className="h-10 border-t bg-muted/20 px-6 flex items-center justify-between text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+          <div className="flex items-center gap-6">
+            <span className="flex items-center gap-2">
+              <span className="opacity-40">SIZE:</span>
+              <span>{node.size || '--'}</span>
+            </span>
+            <Separator orientation="vertical" className="h-3" />
+            <span className="flex items-center gap-2">
+              <span className="opacity-40">LAST MOD:</span>
+              <span>{node.modifiedAt || '2024-04-18'}</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 px-3 py-1 bg-green-500/10 text-green-600 rounded-full">
+              <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+              <span>Viewing Mode</span>
+            </div>
+            <Separator orientation="vertical" className="h-3" />
+            <span className="opacity-40">v1.2.4</span>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
 };
 
 interface TreeItemProps {
@@ -356,6 +486,7 @@ export default function App() {
   const [renamingName, setRenamingName] = useState('');
   const [renamingBookmarkId, setRenamingBookmarkId] = useState<string | null>(null);
   const [renamingBookmarkName, setRenamingBookmarkName] = useState('');
+  const [isSoftwareOpen, setIsSoftwareOpen] = useState(false);
   
   // Context Menu state
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, node: FileNode | null } | null>(null);
@@ -640,14 +771,33 @@ export default function App() {
     return findNode(rootNode, id);
   }, [selectedIds, rootNode]);
 
-  const handleDoubleClick = async (node: FileNode) => {
+  const handleOpenNode = async (node: FileNode) => {
     if (node.type === 'folder') {
       await handleSetRoot(node);
       // Auto-expand in sidebar
       setExpandedIds(prev => new Set([...prev, node.id]));
     } else {
-      setOpenedNode(node);
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/file-content?path=${encodeURIComponent(node.id)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setOpenedNode({ ...node, ...data });
+        } else {
+          setOpenedNode(node);
+        }
+      } catch (err) {
+        console.error(err);
+        setOpenedNode(node);
+      } finally {
+        setLoading(false);
+      }
+      setIsSoftwareOpen(true);
     }
+  };
+
+  const handleDoubleClick = async (node: FileNode) => {
+    await handleOpenNode(node);
   };
 
   const addBookmark = (node: FileNode) => {
@@ -1603,6 +1753,17 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+      
+      {/* Software View / Application Modal */}
+      <AnimatePresence>
+        {isSoftwareOpen && openedNode && (
+          <FileSoftwareView 
+            node={openedNode} 
+            onClose={() => setIsSoftwareOpen(false)} 
+          />
+        )}
+      </AnimatePresence>
+
       {/* Context Menu */}
       <AnimatePresence>
         {contextMenu && (
@@ -1618,6 +1779,20 @@ export default function App() {
             <div className="px-3 py-1.5 border-b mb-1">
               <p className="text-[10px] font-bold text-muted-foreground uppercase truncate">{contextMenu.node?.name || 'File System'}</p>
             </div>
+
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+              onClick={() => {
+                if (contextMenu.node) {
+                  handleOpenNode(contextMenu.node);
+                }
+                setContextMenu(null);
+              }}
+            >
+              <ExternalLink className="h-4 w-4" />
+              <span>Open</span>
+            </button>
+            <Separator className="my-1" />
             
             <button 
               className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
