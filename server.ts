@@ -17,6 +17,11 @@ async function startServer() {
   // API routes...
   // (keeping existing routes)
 
+  // API Health Check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", mode: process.env.NODE_ENV });
+  });
+
   // API to list files in a directory
   app.get("/api/files", async (req, res) => {
     console.log(`[API] Fetching directory: ${req.query.path || 'Root'}`);
@@ -295,15 +300,15 @@ async function startServer() {
       console.error("Failed to load Vite:", e);
     }
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    const distPath = path.join(__dirname, "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  app.listen(PORT, "127.0.0.1", () => {
+    console.log(`Server running on http://127.0.0.1:${PORT}`);
   });
 }
 

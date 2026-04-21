@@ -93,26 +93,50 @@ function createWindow() {
   serverProcess.stdout.on('data', (data) => {
     const output = data.toString();
     console.log(`[Server] ${output}`);
-    if (output.includes('Server running') && !serverStarted) {
-      serverStarted = true;
-      console.log("Server detected. Transitioning from loading screen...");
-      mainWindow.loadURL('http://localhost:3000');
-    }
   });
 
   serverProcess.stderr.on('data', (data) => {
     console.error(`[Server Error] ${data}`);
   });
 
-  // Fallback: if server doesn't report "running" within 25 seconds, try loading anyway
-  setTimeout(() => {
-    if (!serverStarted) {
-      console.log("Startup Timeout: Attempting loadURL anyway...");
-      mainWindow.loadURL('http://localhost:3000').catch(err => {
-        console.error("Critical: Failed to load URL after timeout:", err);
+  // Poll for server readiness via health check
+  const checkServer = async () => {
+    if (serverStarted) return;
+    try {
+      const { net } = require('electron');
+      const request = net.request('http://127.0.0.1:3000/api/health');
+      request.on('response', (response) => {
+        if (response.statusCode === 200 && !serverStarted) {
+          serverStarted = true;
+          console.log("Health check passed. Loading app...");
+          mainWindow.loadURL('http://127.0.0.1:3000');
+        }
       });
+      request.on('error', () => {
+        // Just retry
+      });
+      request.end();
+    } catch (e) {
+      // Ignored
     }
-  }, 25000);
+  };
+
+  const pollInterval = setInterval(checkServer, 1000);
+
+  // Fallback: if server doesn't report "running" within 45 seconds, notify user
+  setTimeout(() => {
+    clearInterval(pollInterval);
+    if (!serverStarted) {
+      console.log("Startup Timeout: Could not connect to backend.");
+      mainWindow.webContents.executeJavaScript(`
+        document.body.innerHTML = '<div style="color: white; text-align: center; padding: 20px;">' +
+          '<h2>Backend connection timeout</h2>' +
+          '<p>The server at 127.0.0.1:3000 is not responding.</p>' +
+          '<button onclick="location.reload()" style="padding: 8px 16px; cursor: pointer;">Retry</button>' +
+          '</div>';
+      `).catch(() => {});
+    }
+  }, 45000);
 
   mainWindow.on('closed', function () {
     mainWindow = null;

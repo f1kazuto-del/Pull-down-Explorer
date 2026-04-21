@@ -54,7 +54,14 @@
     <div class="container">
         <div class="loader"></div>
         <h1>PULL-DOWN EXPLORER</h1>
-        <p>Initializing local file system environment...</p>
+        <p id="status-text">Initializing local server environment...</p>
+        <p style="font-size: 10px; margin-top: 20px; opacity: 0.5;">Target: 127.0.0.1:3000</p>
     </div>
+    <script>
+        // Optional: show a message if it takes too long
+        setTimeout(() => {
+            document.getElementById('status-text').innerText = "Almost there... Setting up workspace.";
+        }, 10000);
+    </script>
 </body>
 </html>
