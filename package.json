@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build": "vite build && npm run build:server",
+    "build:server": "esbuild server.ts --bundle --platform=node --target=node20 --outfile=server.cjs --external:electron --external:adm-zip",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
@@ -29,7 +30,8 @@
     "files": [
       "dist/**/*",
       "electron-main.cjs",
-      "server.ts",
+      "server.cjs",
+      "loading.html",
       "package.json"
     ],
     "win": {
@@ -48,6 +50,7 @@
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
     "electron-updater": "^6.8.3",
+    "esbuild": "^0.28.0",
     "express": "^4.21.2",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",

@@ -56,22 +56,31 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'loading.html'));
 
   // Start the backend server
-  const isDev = !app.isPackaged;
+  const isPackaged = app.isPackaged;
   
   // Directly use the Electron executable as node
   const command = process.execPath;
-  const args = [
-    path.join(app.getAppPath(), 'node_modules', 'tsx', 'dist', 'cli.mjs'),
-    path.join(app.getAppPath(), 'server.ts')
-  ];
+  let args;
+  
+  if (isPackaged) {
+    // In production, we run the compiled server.cjs
+    args = [path.join(app.getAppPath(), 'server.cjs')];
+  } else {
+    // In dev, we use tsx to run server.ts
+    args = [
+      path.join(app.getAppPath(), 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+      path.join(app.getAppPath(), 'server.ts')
+    ];
+  }
 
-  console.log(`Starting server... Node Env: ${isDev ? 'development' : 'production'}`);
+  console.log(`Starting server... Mode: ${isPackaged ? 'Production' : 'Development'}`);
   console.log(`Command: ${command}`);
+  console.log(`Args: ${JSON.stringify(args)}`);
 
   serverProcess = spawn(command, args, {
     env: { 
       ...process.env, 
-      NODE_ENV: isDev ? 'development' : 'production', 
+      NODE_ENV: isPackaged ? 'production' : 'development', 
       PORT: '3000',
       ELECTRON_RUN_AS_NODE: '1'
     },
