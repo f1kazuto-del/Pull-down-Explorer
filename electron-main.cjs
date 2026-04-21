@@ -1,6 +1,7 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
+const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
@@ -13,6 +14,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.cjs')
     },
     title: "Pull-down Explorer"
   });
@@ -145,7 +147,28 @@ function createWindow() {
   });
 }
 
-app.on('ready', createWindow);
+app.on('ready', () => {
+  // Handle File Drag and Drop to outside
+  ipcMain.on('ondragstart', (event, fileName, filePath) => {
+    // Start the native drag using a generic icon reference
+    event.sender.startDrag({
+      file: filePath,
+      icon: path.join(__dirname, 'dist', 'favicon.ico')
+    });
+  });
+
+  // Handle Opening Path with Default Application
+  ipcMain.handle('open-path', async (event, filePath) => {
+    try {
+      const error = await shell.openPath(filePath);
+      return { success: !error, error };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  createWindow();
+});
 
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') {

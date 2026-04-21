@@ -53,6 +53,15 @@ import { mockFileSystem } from './mockData';
 import { FileNode, FileType } from './types';
 import { cn } from '@/lib/utils';
 
+declare global {
+  interface Window {
+    electron?: {
+      startDrag: (fileName: string, filePath: string) => void;
+      openPath: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+    };
+  }
+}
+
 const FileIcon = ({ type, className }: { type: FileType; className?: string }) => {
   switch (type) {
     case 'folder': return <Folder className={cn("text-blue-500 fill-blue-500/20", className)} />;
@@ -1212,10 +1221,16 @@ export default function App() {
   };
 
   const handleDragStart = (e: React.DragEvent, node: FileNode) => {
+    if (window.electron) {
+      // If we're in Electron, trigger native drag
+      e.preventDefault();
+      window.electron.startDrag(node.name, node.id);
+      return;
+    }
+    
     setDraggedNode(node);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('application/json', JSON.stringify({ id: node.id, type: node.type }));
-    // Create a ghost image if needed, but default is fine
   };
 
   const handleDragOver = (e: React.DragEvent, node: FileNode) => {
@@ -1253,6 +1268,17 @@ export default function App() {
       console.error(err);
     }
     setDraggedNode(null);
+  };
+
+  const handleOpenInSystem = async (node: FileNode) => {
+    if (window.electron) {
+      const result = await window.electron.openPath(node.id);
+      if (!result.success) {
+        console.error('Failed to open path in system:', result.error);
+        alert(`Failed to open: ${result.error}`);
+      }
+    }
+    setContextMenu(null);
   };
 
   if (loading && !rootNode) {
@@ -1914,8 +1940,20 @@ export default function App() {
               }}
             >
               <ExternalLink className="h-4 w-4" />
-              <span>Open</span>
+              <span>Open in App</span>
             </button>
+
+            {window.electron && (
+              <button 
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left font-semibold text-primary"
+                onClick={() => {
+                  if (contextMenu.node) handleOpenInSystem(contextMenu.node);
+                }}
+              >
+                <Monitor className="h-4 w-4" />
+                <span>Open with System</span>
+              </button>
+            )}
 
             {contextMenu.node?.name.toLowerCase().endsWith('.zip') && (
               <button 
