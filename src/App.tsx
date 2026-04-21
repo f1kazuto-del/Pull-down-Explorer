@@ -485,6 +485,7 @@ export default function App() {
   const [showDetailPane, setShowDetailPane] = useState(true);
   const [pathCopied, setPathCopied] = useState(false);
   const [renamingName, setRenamingName] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [renamingBookmarkId, setRenamingBookmarkId] = useState<string | null>(null);
   const [renamingBookmarkName, setRenamingBookmarkName] = useState('');
   const [isSoftwareOpen, setIsSoftwareOpen] = useState(false);
@@ -637,16 +638,25 @@ export default function App() {
   // Initial load
   useEffect(() => {
     const init = async () => {
-      const res = await fetchDirectory();
-      if (res) {
-        const data = { ...res, isLoaded: true };
-        setRootNode(data);
-        setNavRoot(data);
-        setViewNodeId(data.id);
-        setExpandedIds(new Set([data.id]));
-        setSelectedIds(new Set([data.id]));
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetchDirectory();
+        if (res) {
+          const data = { ...res, isLoaded: true };
+          setRootNode(data);
+          setNavRoot(data);
+          setViewNodeId(data.id);
+          setExpandedIds(new Set([data.id]));
+          setSelectedIds(new Set([data.id]));
+        } else {
+          setError("Failed to load initial directory. Please check permissions.");
+        }
+      } catch (err: any) {
+        setError(err.message || "An unexpected error occurred during startup.");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     init();
   }, []);
@@ -1243,10 +1253,44 @@ export default function App() {
 
   if (loading && !rootNode) {
     return (
-      <div className="h-screen w-full flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium text-muted-foreground">Loading local files...</p>
+      <div className="h-screen w-full flex items-center justify-center bg-background p-6">
+        <div className="flex flex-col items-center gap-6 text-center max-w-sm">
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+            <FolderSearch className="absolute inset-0 m-auto h-6 w-6 text-primary animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="font-bold text-lg tracking-tight">System Booting...</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Pull-down Explorer is scanning your local file system. This may take a moment depending on directory size.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !rootNode) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-background p-6">
+        <div className="flex flex-col items-center gap-6 text-center max-w-md">
+          <div className="w-20 h-20 rounded-3xl bg-red-500/10 flex items-center justify-center">
+            <X className="h-10 w-10 text-red-500" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="font-bold text-xl tracking-tight text-red-600">Startup Failed</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {error}
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 w-full pt-4">
+            <Button className="w-full h-11 rounded-xl font-bold" onClick={() => window.location.reload()}>
+              Retry Connection
+            </Button>
+            <Button variant="outline" className="w-full h-11 rounded-xl text-xs font-bold opacity-60" onClick={() => handleSetRoot({ id: 'InternalHome', name: 'Home', type: 'folder', modifiedAt: '' })}>
+              Start in Safe Mode (Virtual Home)
+            </Button>
+          </div>
         </div>
       </div>
     );

@@ -52,6 +52,9 @@ function createWindow() {
   // Check for updates automatically on start
   autoUpdater.checkForUpdatesAndNotify();
 
+  // Start the loading screen
+  mainWindow.loadFile(path.join(__dirname, 'loading.html'));
+
   // Start the backend server
   const isDev = !app.isPackaged;
   
@@ -62,15 +65,15 @@ function createWindow() {
     path.join(app.getAppPath(), 'server.ts')
   ];
 
-  console.log(`Starting server...`);
-  console.log(`App Path: ${app.getAppPath()}`);
+  console.log(`Starting server... Node Env: ${isDev ? 'development' : 'production'}`);
+  console.log(`Command: ${command}`);
 
   serverProcess = spawn(command, args, {
     env: { 
       ...process.env, 
       NODE_ENV: isDev ? 'development' : 'production', 
       PORT: '3000',
-      ELECTRON_RUN_AS_NODE: '1' // Make electron act like node
+      ELECTRON_RUN_AS_NODE: '1'
     },
     shell: false,
     cwd: app.getAppPath()
@@ -80,26 +83,27 @@ function createWindow() {
 
   serverProcess.stdout.on('data', (data) => {
     const output = data.toString();
-    console.log(`Server: ${output}`);
+    console.log(`[Server] ${output}`);
     if (output.includes('Server running') && !serverStarted) {
       serverStarted = true;
+      console.log("Server detected. Transitioning from loading screen...");
       mainWindow.loadURL('http://localhost:3000');
     }
   });
 
   serverProcess.stderr.on('data', (data) => {
-    console.error(`Server Error: ${data}`);
+    console.error(`[Server Error] ${data}`);
   });
 
-  // Fallback: if server doesn't report "running" within 10 seconds, try loading anyway
+  // Fallback: if server doesn't report "running" within 25 seconds, try loading anyway
   setTimeout(() => {
     if (!serverStarted) {
-      console.log("Fallback: Attempting to load URL after timeout...");
+      console.log("Startup Timeout: Attempting loadURL anyway...");
       mainWindow.loadURL('http://localhost:3000').catch(err => {
-        console.error("Failed to load URL in fallback:", err);
+        console.error("Critical: Failed to load URL after timeout:", err);
       });
     }
-  }, 10000);
+  }, 25000);
 
   mainWindow.on('closed', function () {
     mainWindow = null;

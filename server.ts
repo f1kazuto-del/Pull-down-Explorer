@@ -19,6 +19,7 @@ async function startServer() {
 
   // API to list files in a directory
   app.get("/api/files", async (req, res) => {
+    console.log(`[API] Fetching directory: ${req.query.path || 'Root'}`);
     try {
       const targetPath = (req.query.path as string) || process.cwd();
       
@@ -28,18 +29,15 @@ async function startServer() {
       }
 
       // Virtual "PC" view
-      if (targetPath === "PC") {
+      if (targetPath === "PC" || targetPath === "InternalHome") {
         return res.json({
-          id: "PC",
-          name: "PC",
+          id: targetPath,
+          name: targetPath === "PC" ? "PC" : "Home",
           type: "folder",
           isLoaded: true,
           isPCView: true,
           children: [
             { id: "C:", name: "Windows (C:)", type: "folder", size: "457.2 GB", totalSize: "905.1 GB", usage: 50, isDrive: true, modifiedAt: "2026-04-18" },
-            { id: "D:", name: "Data (D:)", type: "folder", size: "762.4 GB", totalSize: "1.81 TB", usage: 58, isDrive: true, modifiedAt: "2026-04-18" },
-            { id: "E:", name: "DVD Drive (E:)", type: "folder", size: "0 B", totalSize: "5.16 GB", usage: 0, isDrive: true, modifiedAt: "2026-04-18" },
-            { id: "F:", name: "Backup (F:)", type: "folder", size: "755.1 MB", totalSize: "1.35 GB", usage: 55, isDrive: true, modifiedAt: "2026-04-18" },
             { id: "/", name: "Root (/)", type: "folder", size: "200.5 GB", totalSize: "500.0 GB", usage: 40, isDrive: true, modifiedAt: "2026-04-18" }
           ]
         });
@@ -53,34 +51,26 @@ async function startServer() {
 
       const entries = await fs.readdir(targetPath, { withFileTypes: true });
       
-      const files = await Promise.all(entries.map(async (entry) => {
+      // Batch limit to prevent overloading during stat calls
+      const files = await Promise.all(entries.slice(0, 1000).map(async (entry) => {
         const fullPath = path.join(targetPath, entry.name);
         try {
-          const entryStats = await fs.stat(fullPath);
           const isDirectory = entry.isDirectory();
+          const entryStats = await fs.stat(fullPath).catch(() => null);
+          
           const type = isDirectory ? 'folder' : 
                        entry.name.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? 'image' :
                        entry.name.match(/\.(ts|tsx|js|jsx|json|css|html|md|txt)$/i) ? 'code' : 'document';
           
-          let hasChildren = false;
-          if (isDirectory) {
-            try {
-              const subEntries = await fs.readdir(fullPath);
-              hasChildren = subEntries.length > 0;
-            } catch (e) {
-              // Permission denied or other error, assume empty or inaccessible
-            }
-          }
-
           return {
             id: fullPath,
             name: entry.name,
             type,
-            size: isDirectory ? "" : formatBytes(entryStats.size),
-            modifiedAt: entryStats.mtime.toISOString().split('T')[0],
+            size: isDirectory || !entryStats ? "" : formatBytes(entryStats.size),
+            modifiedAt: entryStats ? entryStats.mtime.toISOString().split('T')[0] : "----",
             children: isDirectory ? [] : undefined,
             isLoaded: false,
-            hasChildren
+            hasChildren: isDirectory // Default to true for folders to improve speed
           };
         } catch (e) {
           return null;
@@ -95,6 +85,7 @@ async function startServer() {
         children: files.filter(f => f !== null)
       });
     } catch (error: any) {
+      console.error(`[API Error] /api/files: ${error.message}`);
       res.status(500).json({ error: error.message });
     }
   });
@@ -107,6 +98,10 @@ async function startServer() {
 
       const stats = await fs.stat(filePath);
       if (stats.isDirectory()) return res.status(400).json({ error: "Path is a directory" });
+
+      if (stats.size > 5 * 1024 * 1024) {
+        return res.json({ content: `[FILE TOO LARGE] File size is ${formatBytes(stats.size)}. Deep preview restricted to < 5MB.` });
+      }
 
       // If it's an image, we might want to serve it differently, but for now let's handle text
       const isImage = filePath.match(/\.(jpg|jpeg|png|gif|webp)$/i);
