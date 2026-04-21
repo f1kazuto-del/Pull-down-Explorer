@@ -1281,15 +1281,15 @@ export default function App() {
 
   const handleDragStart = (e: React.DragEvent, node: FileNode) => {
     setDraggedNode(node); // Always track internally 
-    if (window.electron) {
-      // If we're in Electron, trigger native drag
-      e.preventDefault();
-      window.electron.startDrag(node.name, node.id);
-      return;
-    }
     
-    e.dataTransfer.effectAllowed = 'move';
+    // Setup for internal web app movement
+    e.dataTransfer.effectAllowed = 'copyMove';
     e.dataTransfer.setData('application/json', JSON.stringify({ id: node.id, type: node.type }));
+
+    if (window.electron) {
+      // Concurrently trigger native drag (do NOT preventDefault, or internal drag breaks!)
+      window.electron.startDrag(node.name, node.id);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent, node: FileNode) => {

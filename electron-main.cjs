@@ -150,25 +150,32 @@ function createWindow() {
 app.on('ready', () => {
   // Handle File Drag and Drop to outside
   ipcMain.on('ondragstart', (event, fileName, filePath) => {
-    // Determine a safe icon to use. startDrag requires a valid image.
-    let dragIcon;
-    const distIcon = path.join(__dirname, 'dist', 'favicon.ico');
-    const pubIcon = path.join(__dirname, 'public', 'favicon.ico');
-    
-    if (fs.existsSync(distIcon)) {
-      dragIcon = nativeImage.createFromPath(distIcon);
-    } else if (fs.existsSync(pubIcon)) {
-      dragIcon = nativeImage.createFromPath(pubIcon);
-    } else {
-      // 1x1 transparent PNG fallback to prevent crash
-      dragIcon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsQAAA7EAZUrDhsAAAANSURBVBhXYzh8+PB/AAffA0nNPuPnAAAAAElFTkSuQmCC');
-    }
+    try {
+      // Determine a safe icon to use. startDrag requires a perfectly valid NativeImage.
+      let dragIcon;
+      // Start with a guaranteed safe empty 32x32 transparent bitmap
+      const fallbackBuffer = Buffer.alloc(4 * 32 * 32, 255); 
+      dragIcon = nativeImage.createFromBitmap(fallbackBuffer, {width: 32, height: 32});
+      
+      const distIcon = path.join(__dirname, 'dist', 'favicon.ico');
+      const pubIcon = path.join(__dirname, 'public', 'favicon.ico');
+      
+      if (fs.existsSync(distIcon)) {
+        const img = nativeImage.createFromPath(distIcon);
+        if (!img.isEmpty()) dragIcon = img;
+      } else if (fs.existsSync(pubIcon)) {
+        const img = nativeImage.createFromPath(pubIcon);
+        if (!img.isEmpty()) dragIcon = img;
+      }
 
-    // Start the native drag
-    event.sender.startDrag({
-      file: filePath,
-      icon: dragIcon
-    });
+      // Start the native drag
+      event.sender.startDrag({
+        file: filePath,
+        icon: dragIcon
+      });
+    } catch (err) {
+      console.error("Drag start failed: ", err);
+    }
   });
 
   // Handle Opening Path with Default Application
