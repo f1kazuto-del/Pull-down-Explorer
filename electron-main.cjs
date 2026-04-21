@@ -104,16 +104,17 @@ function createWindow() {
     if (serverStarted) return;
     try {
       const { net } = require('electron');
+      // Try 127.0.0.1 first, then localhost in the logs if it fails
       const request = net.request('http://127.0.0.1:3000/api/health');
       request.on('response', (response) => {
         if (response.statusCode === 200 && !serverStarted) {
           serverStarted = true;
-          console.log("Health check passed. Loading app...");
+          console.log("Backend confirmed healthy. Switching from loading screen.");
           mainWindow.loadURL('http://127.0.0.1:3000');
         }
       });
-      request.on('error', () => {
-        // Just retry
+      request.on('error', (err) => {
+        // console.log("Waiting for backend...");
       });
       request.end();
     } catch (e) {
