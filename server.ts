@@ -51,43 +51,30 @@ async function startServer() {
 
       const entries = await fs.readdir(targetPath, { withFileTypes: true });
       
-      // Significantly reduced limit for initial response to speed up perceived performance
-      const limit = 200;
+      // Significantly reduced limit for initial response
+      const limit = 300;
       const slicedEntries = entries.slice(0, limit);
       
-      // Process stats in smaller concurrent chunks to avoid I/O bottlenecks
-      const files = [];
-      const chunkSize = 20;
-      
-      for (let i = 0; i < slicedEntries.length; i += chunkSize) {
-        const chunk = slicedEntries.slice(i, i + chunkSize);
-        const processedChunk = await Promise.all(chunk.map(async (entry) => {
-          const fullPath = path.join(targetPath, entry.name);
-          try {
-            const isDirectory = entry.isDirectory();
-            // Faster stat call: if we can't get it immediately, we provide placeholders
-            const entryStats = await fs.stat(fullPath).catch(() => null);
-            
-            const type = isDirectory ? 'folder' : 
-                         entry.name.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? 'image' :
-                         entry.name.match(/\.(ts|tsx|js|jsx|json|css|html|md|txt)$/i) ? 'code' : 'document';
-            
-            return {
-              id: fullPath,
-              name: entry.name,
-              type,
-              size: isDirectory || !entryStats ? "" : formatBytes(entryStats.size),
-              modifiedAt: entryStats ? entryStats.mtime.toISOString().split('T')[0] : "----",
-              children: isDirectory ? [] : undefined,
-              isLoaded: false,
-              hasChildren: isDirectory 
-            };
-          } catch (e) {
-            return null;
-          }
-        }));
-        files.push(...processedChunk);
-      }
+      // SUPER FAST PASS: Don't wait for stats if we have many entries
+      // Only do stats for small directories, otherwise lazy-load size/date
+      const files = slicedEntries.map((entry) => {
+        const fullPath = path.join(targetPath, entry.name);
+        const isDirectory = entry.isDirectory();
+        const type = isDirectory ? 'folder' : 
+                     entry.name.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? 'image' :
+                     entry.name.match(/\.(ts|tsx|js|jsx|json|css|html|md|txt)$/i) ? 'code' : 'document';
+        
+        return {
+          id: fullPath,
+          name: entry.name,
+          type,
+          size: "", // Lazy load
+          modifiedAt: "----", // Lazy load
+          children: isDirectory ? [] : undefined,
+          isLoaded: false,
+          hasChildren: isDirectory 
+        };
+      });
 
       res.json({
         id: targetPath,

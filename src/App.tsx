@@ -638,11 +638,13 @@ export default function App() {
   // Initial load
   useEffect(() => {
     const init = async () => {
+      console.log("[Explorer] Starting initialization...");
       setLoading(true);
       setError(null);
       try {
         const res = await fetchDirectory();
         if (res) {
+          console.log("[Explorer] Root directory loaded successfully:", res.id);
           const data = { ...res, isLoaded: true };
           setRootNode(data);
           setNavRoot(data);
@@ -650,9 +652,11 @@ export default function App() {
           setExpandedIds(new Set([data.id]));
           setSelectedIds(new Set([data.id]));
         } else {
+          console.error("[Explorer] fetchDirectory returned null");
           setError("Failed to load initial directory. Please check permissions.");
         }
       } catch (err: any) {
+        console.error("[Explorer] Initialization error:", err);
         setError(err.message || "An unexpected error occurred during startup.");
       } finally {
         setLoading(false);
@@ -1661,12 +1665,12 @@ export default function App() {
                     <div className="h-14 border-b flex items-center px-6 bg-muted/10 gap-4 shrink-0 justify-between">
                       <div className="flex items-center gap-3 overflow-hidden">
                         <div className="p-2 rounded-lg bg-primary/10">
-                          <FileIcon type={(selectedNode || openedNode!).type} className="h-5 w-5 text-primary" />
+                          <FileIcon type={(selectedNode || openedNode)?.type || 'document'} className="h-5 w-5 text-primary" />
                         </div>
-                        <span className="font-bold truncate text-base">{(selectedNode || openedNode!).name}</span>
+                        <span className="font-bold truncate text-base">{(selectedNode || openedNode)?.name || 'Loading...'}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => addBookmark(selectedNode || openedNode!)} className="h-8 gap-2">
+                        <Button variant="outline" size="sm" onClick={() => (selectedNode || openedNode) && addBookmark(selectedNode || openedNode!)} className="h-8 gap-2">
                            <Star className="h-3.5 w-3.5" />
                            Add Bookmark
                         </Button>
@@ -1742,7 +1746,7 @@ export default function App() {
                                    size="icon" 
                                    title="Delete" 
                                    className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                                   onClick={() => handleDelete(selectedNode || openedNode!)}
+                                   onClick={() => (selectedNode || openedNode) && handleDelete((selectedNode || openedNode)!)}
                                  >
                                    <Trash2 className="h-4 w-4" />
                                  </Button>
@@ -1761,11 +1765,11 @@ export default function App() {
                               <div className="space-y-4 text-xs font-medium">
                                 <div className="flex justify-between items-center py-2 border-b border-dashed">
                                   <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Type</span>
-                                  <Badge variant="secondary" className="uppercase text-[9px] h-5 font-bold tracking-widest px-2">{(selectedNode || openedNode!).type}</Badge>
+                                  <Badge variant="secondary" className="uppercase text-[9px] h-5 font-bold tracking-widest px-2">{(selectedNode || openedNode)?.type || '---'}</Badge>
                                 </div>
                                 <div className="flex justify-between items-center py-2 border-b border-dashed">
                                   <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Size</span>
-                                  <span className="font-mono font-bold text-foreground">{(selectedNode || openedNode!).size || '73 Bytes'}</span>
+                                  <span className="font-mono font-bold text-foreground">{(selectedNode || openedNode)?.size || '---'}</span>
                                 </div>
                                 <div className="flex justify-between items-center py-2 border-b border-dashed">
                                   <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Created</span>
@@ -1773,7 +1777,7 @@ export default function App() {
                                 </div>
                                 <div className="flex justify-between items-center py-2 border-b border-dashed">
                                   <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Modified</span>
-                                  <span className="font-mono opacity-60">{(selectedNode || openedNode!).modifiedAt || '2026-04-18'}</span>
+                                  <span className="font-mono opacity-60">{(selectedNode || openedNode)?.modifiedAt || '----'}</span>
                                 </div>
                               </div>
                             </div>
@@ -1795,8 +1799,8 @@ export default function App() {
                             {/* Full Path */}
                             <div className="space-y-5">
                               <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.25em]">Full Path</h3>
-                              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-[11px] font-mono break-all leading-relaxed shadow-inner">
-                                /app/applet/{(selectedNode || openedNode!).name}
+                               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-[11px] font-mono break-all leading-relaxed shadow-inner">
+                                /app/applet/{(selectedNode || openedNode)?.name || ''}
                               </div>
                             </div>
                           </div>
