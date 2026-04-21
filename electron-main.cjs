@@ -150,10 +150,20 @@ function createWindow() {
 app.on('ready', () => {
   // Handle File Drag and Drop to outside
   ipcMain.on('ondragstart', (event, fileName, filePath) => {
-    // Start the native drag using a generic icon reference
+    // Determine a safe icon to use
+    let iconPath = path.join(__dirname, 'dist', 'favicon.ico');
+    if (!fs.existsSync(iconPath)) {
+      // Fallback if we are in dev or custom build path
+      iconPath = path.join(__dirname, 'public', 'favicon.ico');
+      if (!fs.existsSync(iconPath)) {
+        iconPath = process.execPath; // Safe fallback to the executable's icon
+      }
+    }
+
+    // Start the native drag
     event.sender.startDrag({
       file: filePath,
-      icon: path.join(__dirname, 'dist', 'favicon.ico')
+      icon: iconPath
     });
   });
 

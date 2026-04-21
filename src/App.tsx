@@ -347,9 +347,7 @@ const TreeItem = ({ node, level, selectedIds, expandedIds, onSelect, onToggle, o
         onClick={(e) => {
           onSelect(node, e.ctrlKey || e.metaKey, e.shiftKey);
         }}
-        onDoubleClick={() => {
-          if (isFolder) onDoubleClick(node);
-        }}
+        onDoubleClick={() => onDoubleClick(node)}
         onContextMenu={(e) => onContextMenu(e, node)}
         draggable
         onDragStart={(e) => onDragStart(e, node)}
@@ -846,7 +844,15 @@ export default function App() {
   };
 
   const handleDoubleClick = async (node: FileNode) => {
-    await handleOpenNode(node);
+    if (node.type === 'folder') {
+      await handleOpenNode(node);
+    } else {
+      if (window.electron) {
+        await handleOpenInSystem(node);
+      } else {
+        await handleOpenNode(node);
+      }
+    }
   };
 
   const addBookmark = (node: FileNode) => {
@@ -1221,6 +1227,7 @@ export default function App() {
   };
 
   const handleDragStart = (e: React.DragEvent, node: FileNode) => {
+    setDraggedNode(node); // Always track internally 
     if (window.electron) {
       // If we're in Electron, trigger native drag
       e.preventDefault();
@@ -1228,7 +1235,6 @@ export default function App() {
       return;
     }
     
-    setDraggedNode(node);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('application/json', JSON.stringify({ id: node.id, type: node.type }));
   };
