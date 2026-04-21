@@ -275,6 +275,22 @@ async function startServer() {
         appType: "spa",
       });
       app.use(vite.middlewares);
+
+      // SPA Fallback for development
+      app.use('*', async (req, res, next) => {
+        const url = req.originalUrl;
+        if (url.startsWith('/api')) return next();
+        
+        try {
+          let template = await fs.readFile(path.resolve(__dirname, 'index.html'), 'utf-8');
+          template = await vite.transformIndexHtml(url, template);
+          res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+        } catch (e: any) {
+          vite.ssrFixStacktrace(e);
+          console.error(`[Vite Error] ${e.stack}`);
+          res.status(500).end(e.stack);
+        }
+      });
     } catch (e) {
       console.error("Failed to load Vite:", e);
     }
