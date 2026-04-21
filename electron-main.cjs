@@ -1,6 +1,6 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, nativeImage } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 
@@ -150,20 +150,24 @@ function createWindow() {
 app.on('ready', () => {
   // Handle File Drag and Drop to outside
   ipcMain.on('ondragstart', (event, fileName, filePath) => {
-    // Determine a safe icon to use
-    let iconPath = path.join(__dirname, 'dist', 'favicon.ico');
-    if (!fs.existsSync(iconPath)) {
-      // Fallback if we are in dev or custom build path
-      iconPath = path.join(__dirname, 'public', 'favicon.ico');
-      if (!fs.existsSync(iconPath)) {
-        iconPath = process.execPath; // Safe fallback to the executable's icon
-      }
+    // Determine a safe icon to use. startDrag requires a valid image.
+    let dragIcon;
+    const distIcon = path.join(__dirname, 'dist', 'favicon.ico');
+    const pubIcon = path.join(__dirname, 'public', 'favicon.ico');
+    
+    if (fs.existsSync(distIcon)) {
+      dragIcon = nativeImage.createFromPath(distIcon);
+    } else if (fs.existsSync(pubIcon)) {
+      dragIcon = nativeImage.createFromPath(pubIcon);
+    } else {
+      // 1x1 transparent PNG fallback to prevent crash
+      dragIcon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsQAAA7EAZUrDhsAAAANSURBVBhXYzh8+PB/AAffA0nNPuPnAAAAAElFTkSuQmCC');
     }
 
     // Start the native drag
     event.sender.startDrag({
       file: filePath,
-      icon: iconPath
+      icon: dragIcon
     });
   });
 
@@ -175,6 +179,32 @@ app.on('ready', () => {
     } catch (e) {
       return { success: false, error: e.message };
     }
+  });
+
+  // Handle User Selecting a Custom Program (.exe)
+  ipcMain.handle('select-program', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: 'Select Program to Open With',
+      properties: ['openFile'],
+      filters: [{ name: 'Executables', extensions: ['exe', 'bat', 'cmd', 'app', 'sh'] }]
+    });
+    if (canceled || filePaths.length === 0) return { success: false };
+    return { success: true, path: filePaths[0] };
+  });
+
+  // Handle Opening a File with a Specific Program
+  ipcMain.handle('open-with-program', async (event, filePath, programPath) => {
+    return new Promise((resolve) => {
+      execFile(programPath, [filePath], (error) => {
+        if (error) {
+          resolve({ success: false, error: error.message });
+        } else {
+          resolve({ success: true });
+        }
+      });
+      // Resolve immediately after spawning for GUI apps so we don't hang
+      setTimeout(() => resolve({ success: true }), 500); 
+    });
   });
 
   createWindow();

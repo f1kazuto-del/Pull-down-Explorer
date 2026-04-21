@@ -6,5 +6,11 @@ contextBridge.exposeInMainWorld('electron', {
   },
   openPath: (filePath) => {
     return ipcRenderer.invoke('open-path', filePath);
+  },
+  selectProgram: () => {
+    return ipcRenderer.invoke('select-program');
+  },
+  openWithProgram: (filePath, programPath) => {
+    return ipcRenderer.invoke('open-with-program', filePath, programPath);
   }
 });

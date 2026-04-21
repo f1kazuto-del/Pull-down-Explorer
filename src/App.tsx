@@ -58,6 +58,8 @@ declare global {
     electron?: {
       startDrag: (fileName: string, filePath: string) => void;
       openPath: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+      selectProgram: () => Promise<{ success: boolean; path?: string }>;
+      openWithProgram: (filePath: string, programPath: string) => Promise<{ success: boolean; error?: string }>;
     };
   }
 }
@@ -496,6 +498,17 @@ export default function App() {
   const [renamingBookmarkId, setRenamingBookmarkId] = useState<string | null>(null);
   const [renamingBookmarkName, setRenamingBookmarkName] = useState('');
   const [isSoftwareOpen, setIsSoftwareOpen] = useState(false);
+
+  // Custom Default Programs Map: Record<Extension, ExecutablePath>
+  const [appAssociations, setAppAssociations] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem('explorer-app-associations');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return {};
+  });
   
   // Context Menu state
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, node: FileNode | null } | null>(null);
@@ -628,6 +641,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('explorer-recent-folders', JSON.stringify(recentFolders));
   }, [recentFolders]);
+
+  useEffect(() => {
+    localStorage.setItem('explorer-app-associations', JSON.stringify(appAssociations));
+  }, [appAssociations]);
 
   // Fetch directory structure
   const fetchDirectory = async (path?: string): Promise<FileNode | null> => {
@@ -848,11 +865,47 @@ export default function App() {
       await handleOpenNode(node);
     } else {
       if (window.electron) {
+        // Check if we have a custom association for this extension
+        const extMatch = node.name.match(/\.([^.]+)$/);
+        if (extMatch) {
+          const extension = extMatch[1].toLowerCase();
+          const customApp = appAssociations[extension];
+          if (customApp) {
+            const result = await window.electron.openWithProgram(node.id, customApp);
+            if (!result.success) {
+               console.error("Failed to open with custom program:", result.error);
+               // Fallback to system OS setting if our custom program no longer exists
+               await handleOpenInSystem(node);
+            }
+            return;
+          }
+        }
         await handleOpenInSystem(node);
       } else {
         await handleOpenNode(node);
       }
     }
+  };
+
+  const handleChooseProgram = async (node: FileNode) => {
+    if (window.electron) {
+      const result = await window.electron.selectProgram();
+      if (result.success && result.path) {
+        // Link this extension to the chosen program
+        const extMatch = node.name.match(/\.([^.]+)$/);
+        if (extMatch) {
+          const extension = extMatch[1].toLowerCase();
+          setAppAssociations(prev => ({ ...prev, [extension]: result.path! }));
+          
+          // Open immediately with newly chosen program
+          await window.electron.openWithProgram(node.id, result.path!);
+        } else {
+          // If no extension, just open it once
+          await window.electron.openWithProgram(node.id, result.path!);
+        }
+      }
+    }
+    setContextMenu(null);
   };
 
   const addBookmark = (node: FileNode) => {
@@ -1954,8 +2007,17 @@ export default function App() {
               }}
             >
               <Monitor className="h-4 w-4" />
-              <span>Open with System</span>
+              <span>Open with System Default</span>
             </button>
+
+            {window.electron && contextMenu.node && contextMenu.node.type !== 'folder' && (
+              <button 
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] hover:bg-muted text-left text-muted-foreground pl-8"
+                onClick={() => handleChooseProgram(contextMenu.node!)}
+              >
+                <span>Choose Program...</span>
+              </button>
+            )}
 
             {contextMenu.node?.name.toLowerCase().endsWith('.zip') && (
               <button 
