@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && npm run build:server",
-    "build:server": "esbuild server.ts --bundle --platform=node --target=node20 --outfile=server.cjs --external:electron --external:adm-zip",
+    "build:server": "esbuild server.ts --bundle --platform=node --target=node20 --outfile=server.cjs --external:electron --external:adm-zip --external:vite --external:esbuild --log-override:empty-import-meta=silent --log-override:require-resolve-not-external=silent --log-override:empty-glob=silent",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",

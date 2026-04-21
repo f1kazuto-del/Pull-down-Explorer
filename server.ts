@@ -3,8 +3,16 @@ import path from "path";
 import fs from "fs/promises";
 import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Safe directory resolution for both ESM and CJS bundled code
+const getDirname = () => {
+  try {
+    return path.dirname(fileURLToPath(import.meta.url));
+  } catch (e) {
+    // In CJS bundle, __dirname is a global
+    return __dirname;
+  }
+};
+const currentDir = getDirname();
 
 import AdminZip from "adm-zip";
 
@@ -287,7 +295,7 @@ async function startServer() {
         if (url.startsWith('/api')) return next();
         
         try {
-          let template = await fs.readFile(path.resolve(__dirname, 'index.html'), 'utf-8');
+          let template = await fs.readFile(path.resolve(currentDir, 'index.html'), 'utf-8');
           template = await vite.transformIndexHtml(url, template);
           res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
         } catch (e: any) {
@@ -300,7 +308,7 @@ async function startServer() {
       console.error("Failed to load Vite:", e);
     }
   } else {
-    const distPath = path.join(__dirname, "dist");
+    const distPath = path.join(currentDir, "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
