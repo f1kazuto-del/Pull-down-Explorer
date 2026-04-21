@@ -1283,6 +1283,8 @@ export default function App() {
         console.error('Failed to open path in system:', result.error);
         alert(`Failed to open: ${result.error}`);
       }
+    } else {
+      alert("【デスクトップ版専用機能】\nブラウザ上では、OSのプログラム（フォトアプリ等）を直接起動することはできません。\nこの機能を使うには、アプリをビルドしてWindows上で起動してください。");
     }
     setContextMenu(null);
   };
@@ -1932,10 +1934,6 @@ export default function App() {
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-3 py-1.5 border-b mb-1">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase truncate">{contextMenu.node?.name || 'File System'}</p>
-            </div>
-
             <button 
               className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
               onClick={() => {
@@ -1949,17 +1947,15 @@ export default function App() {
               <span>Open in App</span>
             </button>
 
-            {window.electron && (
-              <button 
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left font-semibold text-primary"
-                onClick={() => {
-                  if (contextMenu.node) handleOpenInSystem(contextMenu.node);
-                }}
-              >
-                <Monitor className="h-4 w-4" />
-                <span>Open with System</span>
-              </button>
-            )}
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left font-semibold text-primary"
+              onClick={() => {
+                if (contextMenu.node) handleOpenInSystem(contextMenu.node);
+              }}
+            >
+              <Monitor className="h-4 w-4" />
+              <span>Open with System</span>
+            </button>
 
             {contextMenu.node?.name.toLowerCase().endsWith('.zip') && (
               <button 
