@@ -60,6 +60,7 @@ declare global {
       openPath: (filePath: string) => Promise<{ success: boolean; error?: string }>;
       selectProgram: () => Promise<{ success: boolean; path?: string }>;
       openWithProgram: (filePath: string, programPath: string) => Promise<{ success: boolean; error?: string }>;
+      copyToClipboard: (text: string) => void;
     };
   }
 }
@@ -923,9 +924,36 @@ export default function App() {
   };
 
   const handleCopyPath = (node: FileNode) => {
-    navigator.clipboard.writeText(node.id);
-    setPathCopied(true);
-    setTimeout(() => setPathCopied(false), 2000);
+    if (window.electron && window.electron.copyToClipboard) {
+      window.electron.copyToClipboard(node.id);
+      setPathCopied(true);
+      setTimeout(() => setPathCopied(false), 2000);
+      return;
+    }
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(node.id).then(() => {
+        setPathCopied(true);
+        setTimeout(() => setPathCopied(false), 2000);
+      }).catch(err => console.error("Clipboard copy failed:", err));
+    } else {
+      // Fallback for iframe/insecure contexts
+      const textArea = document.createElement("textarea");
+      textArea.value = node.id;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        setPathCopied(true);
+        setTimeout(() => setPathCopied(false), 2000);
+      } catch (err) {
+        console.error("Fallback clipboard copy failed:", err);
+      }
+      document.body.removeChild(textArea);
+    }
   };
 
   const handleRefresh = async () => {
@@ -1391,67 +1419,150 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden font-sans">
-      {/* Header */}
-      <header className="h-12 border-b flex items-center justify-between px-4 bg-card/50 backdrop-blur-md z-10 shrink-0">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 mr-2 border-r pr-4 font-mono">
-            <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <FolderSearch className="h-4 w-4 text-primary" />
-            </div>
-            <span className="font-bold tracking-tight hidden lg:inline-block whitespace-nowrap text-xs">PULL-DOWN EXPLORER</span>
+      
+      {/* Unified Compact Header */}
+      <header className="h-14 border-b flex items-center justify-between px-3 bg-white shadow-sm z-20 shrink-0 gap-3">
+        {/* Nav & Root Navigation */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 mr-1">
+            <FolderSearch className="h-4 w-4 text-primary" />
           </div>
-          <div className="flex items-center gap-2">
-            <div className="relative w-56 group">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-              <Input 
-                placeholder="Search files..." 
-                className="pl-8 h-7 text-xs bg-muted/40 border-none focus-visible:ring-1 focus-visible:ring-primary/30"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            
-            <Separator orientation="vertical" className="h-5" />
-            
-            <div className="flex items-center gap-0.5">
-              <Button 
-                variant={viewMode === 'grid' ? 'secondary' : 'ghost'} 
-                size="icon" 
-                className="h-7 w-7"
-                onClick={() => setViewMode('grid')}
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-              </Button>
-              <Button 
-                variant={viewMode === 'list' ? 'secondary' : 'ghost'} 
-                size="icon" 
-                className="h-7 w-7"
-                onClick={() => setViewMode('list')}
-              >
-                <List className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
+          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted" onClick={() => handleSetRoot({ id: 'Root', name: 'Root', type: 'folder', modifiedAt: '' })} title="Go to Home">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted" onClick={handleGoUp} title="Go Up One Level">
+            <ArrowUp className="h-4 w-4" />
+          </Button>
+          <Separator orientation="vertical" className="h-5 mx-1" />
+          <Button variant="ghost" size="sm" className={cn("h-8 px-2 gap-1.5 text-[11px]", viewNodeId === 'PC' && "bg-primary/10 text-primary")} onClick={() => handleSetRoot({ id: 'PC', name: 'PC', type: 'folder', modifiedAt: '' })}>
+            <Monitor className="h-3.5 w-3.5" /> <span className="font-bold hidden sm:inline">PC</span>
+          </Button>
+          <Button variant="ghost" size="sm" className={cn("h-8 px-2 gap-1.5 text-[11px]", viewNodeId === 'Desktop' && "bg-primary/10 text-primary")} onClick={() => handleSetRoot({ id: 'Desktop', name: 'Desktop', type: 'folder', modifiedAt: '' })}>
+            <LayoutTemplate className="h-3.5 w-3.5" /> <span className="font-bold hidden md:inline">Desktop</span>
+          </Button>
         </div>
 
-        <div className="flex items-center gap-3">
-           {showDebug && (
-             <Badge variant="destructive" className="animate-pulse">Debug Mode</Badge>
-           )}
-           <Separator orientation="vertical" className="h-6" />
-           <Button variant="ghost" size="sm" onClick={handleRefresh} className="h-8 gap-2">
-             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-             Refresh
-           </Button>
+        {/* Address Bar / Breadcrumbs */}
+        <div className="flex-1 min-w-0 flex items-center h-8 bg-muted/30 border rounded-md px-2 overflow-hidden hover:border-primary/40 transition-colors group">
+            {isEditingPath ? (
+              <form onSubmit={handleManualPathSubmit} className="flex-1 w-full h-full flex items-center">
+                <Input
+                  autoFocus
+                  value={manualPath}
+                  onChange={(e) => setManualPath(e.target.value)}
+                  onBlur={() => setIsEditingPath(false)}
+                  onKeyDown={(e) => e.key === 'Escape' && setIsEditingPath(false)}
+                  className="h-full py-0 px-1 text-[11px] bg-transparent border-none rounded-none focus-visible:ring-0 shadow-none w-full"
+                />
+              </form>
+            ) : (
+              <div 
+                className="flex items-center gap-0.5 text-[11px] font-medium text-muted-foreground overflow-hidden cursor-text w-full h-full"
+                onClick={() => setIsEditingPath(true)}
+              >
+                <div 
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted transition-colors cursor-pointer shrink-0"
+                  onClick={(e) => { e.stopPropagation(); handleSetRoot({ id: '.', name: 'Root', type: 'folder', modifiedAt: '' }); }}
+                >
+                  <HardDrive className="h-3 w-3 text-slate-400" />
+                  <span className="font-bold text-foreground">Root</span>
+                </div>
+                {rootBreadcrumbs.map((node, i) => (
+                  <div 
+                    key={node.id} 
+                    className={cn(
+                      "flex items-center gap-1 shrink-0 px-1 py-0.5 rounded transition-colors",
+                      dragOverId === node.id && "bg-primary/20 ring-1 ring-primary/30"
+                    )}
+                    onDragOver={(e) => handleDragOver(e, node)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, node)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSetRoot(node);
+                    }}
+                  >
+                    <ChevronRight className="h-3 w-3 opacity-30 shrink-0 mx-0.5" />
+                    <Folder className="h-3 w-3 shrink-0 text-slate-400" />
+                    <span 
+                      className={cn(
+                        "truncate max-w-[100px] cursor-pointer hover:text-foreground",
+                        i === rootBreadcrumbs.length - 1 ? "text-foreground font-bold" : "text-muted-foreground"
+                      )}
+                    >
+                      {node.name || 'Root'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+        </div>
+
+        {/* Search & Setup */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Sort Selector (visible in grid mode) */}
+          {viewMode === 'grid' && (
+            <div className="hidden md:flex items-center gap-1 mr-1">
+              <span className="text-[9px] uppercase tracking-widest font-bold text-muted-foreground">Sort:</span>
+              <select 
+                className="bg-transparent border-none text-[10px] font-bold text-foreground outline-none cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
+                onChange={(e) => setSortConfig(s => ({ key: e.target.value as any, direction: s.direction }))}
+                value={sortConfig.key}
+              >
+                <option value="name">Name</option>
+                <option value="modifiedAt">Date</option>
+                <option value="size">Size</option>
+              </select>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSortConfig(s => ({ key: s.key, direction: s.direction === 'asc' ? 'desc' : 'asc' }))}>
+                {sortConfig.direction === 'asc' ? '↑' : '↓'}
+              </Button>
+            </div>
+          )}
+
+          <div className="relative w-32 md:w-40 lg:w-48 group">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+            <Input 
+              placeholder="Search..." 
+              className="pl-8 h-8 text-[11px] bg-muted/30 border-border/50 focus-visible:ring-1 focus-visible:ring-primary/30"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          
+          <div className="flex items-center bg-muted/20 border rounded-md p-0.5 ml-0.5">
+            <Button variant={viewMode === 'grid' ? 'secondary' : 'ghost'} size="icon" className="h-7 w-7 rounded-sm" onClick={() => setViewMode('grid')}>
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="icon" className="h-7 w-7 rounded-sm" onClick={() => setViewMode('list')}>
+              <List className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          
+          <Separator orientation="vertical" className="h-5 mx-0.5" />
+
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleRefresh} title="Refresh">
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn("h-8 w-8", !showDetailPane && "text-primary bg-primary/10")}
+            onClick={() => setShowDetailPane(prev => !prev)}
+            title="Toggle Detail Pane"
+          >
+            {showDetailPane ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+          </Button>
         </div>
       </header>
 
-      {/* Bookmarks & Path Bar */}
-      <div className="flex flex-col bg-muted/5 border-b shrink-0">
-        {/* Bookmarks Bar */}
-        <div className="h-8 px-5 flex items-center gap-3 overflow-x-auto scrollbar-hide border-b bg-white group shadow-inner">
-          <Star className="h-3 w-3 text-muted-foreground shrink-0 opacity-50" />
-          {bookmarks.length === 0 && <span className="text-[9px] text-muted-foreground uppercase tracking-[0.2em] font-bold">No bookmarks</span>}
+      {/* Bookmarks Bar - Interactive Hover Area */}
+      <div className="relative z-10 w-full group shrink-0 h-0">
+        <div className="absolute top-0 w-full h-8 px-4 flex items-center gap-3 bg-white border-b shadow-sm transition-transform duration-200 transform -translate-y-full group-hover:translate-y-0 opacity-0 group-hover:opacity-100 overflow-x-auto scrollbar-hide">
+          <Star className="h-3 w-3 text-yellow-500 shrink-0" />
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest shrink-0">Bookmarks</span>
+          <Separator orientation="vertical" className="h-4 mx-1" />
+          {bookmarks.length === 0 && <span className="text-[10px] text-muted-foreground opacity-60">No bookmarks saved</span>}
           {bookmarks.map(b => (
             <div key={b.node.id} className="flex items-center gap-0.5 shrink-0">
               {renamingBookmarkId === b.node.id ? (
@@ -1461,7 +1572,7 @@ export default function App() {
                 >
                   <Input 
                     autoFocus
-                    className="h-6 py-0 px-2 text-[10px] w-24 bg-background"
+                    className="h-6 py-0 px-2 text-[10px] w-24 bg-muted/20"
                     value={renamingBookmarkName}
                     onChange={(e) => setRenamingBookmarkName(e.target.value)}
                     onBlur={() => updateBookmarkAlias(b.node.id, renamingBookmarkName)}
@@ -1481,147 +1592,15 @@ export default function App() {
                     setContextMenu({ x: e.clientX, y: e.clientY, node: b.node });
                   }}
                 >
-                  <Folder className="h-2.5 w-2.5 opacity-70" />
+                  <Folder className="h-3 w-3 opacity-70" />
                   {b.alias || b.node.name}
                 </Button>
               )}
             </div>
           ))}
         </div>
-
-        {/* Address Bar */}
-        <div className="h-9 px-3 flex items-center gap-4 bg-white shadow-sm">
-          <div className="flex items-center gap-1 border-r pr-3">
-            <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted" onClick={() => handleSetRoot({ id: 'Root', name: 'Root', type: 'folder', modifiedAt: '' })} title="Go to Root">
-              <ArrowLeft className="h-3.5 w-3.5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted" onClick={handleGoUp} title="Go Up One Level">
-              <ArrowUp className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-1 border-r pr-3">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className={cn("h-7 px-2 text-[10px] gap-1.5", viewNodeId === 'PC' && "bg-primary/10 text-primary")}
-              onClick={() => handleSetRoot({ id: 'PC', name: 'PC', type: 'folder', modifiedAt: '' })}
-            >
-              <Monitor className="h-3.5 w-3.5" />
-              <span className="font-bold">PC</span>
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className={cn("h-7 px-2 text-[10px] gap-1.5", viewNodeId === 'Desktop' && "bg-primary/10 text-primary")}
-              onClick={() => handleSetRoot({ id: 'Desktop', name: 'Desktop', type: 'folder', modifiedAt: '' })}
-            >
-              <LayoutTemplate className="h-3.5 w-3.5" />
-              <span className="font-bold">デスクトップ</span>
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className={cn("h-7 px-2 text-[10px] gap-1.5", (viewNodeId === '.' || viewNodeId === 'Root') && "bg-primary/10 text-primary")}
-              onClick={() => handleSetRoot({ id: '.', name: 'Root', type: 'folder', modifiedAt: '' })}
-            >
-              <HardDrive className="h-3.5 w-3.5" />
-              <span className="font-bold">Root</span>
-            </Button>
-          </div>
-
-          <div className="flex-1 min-w-0">
-            {isEditingPath ? (
-              <form onSubmit={handleManualPathSubmit} className="flex items-center gap-2">
-                <Input
-                  autoFocus
-                  value={manualPath}
-                  onChange={(e) => setManualPath(e.target.value)}
-                  onBlur={() => setIsEditingPath(false)}
-                  onKeyDown={(e) => e.key === 'Escape' && setIsEditingPath(false)}
-                  className="h-7 py-0 px-3 text-[11px] bg-muted/20 border rounded-lg focus-visible:ring-1 focus-visible:ring-primary/20"
-                />
-              </form>
-            ) : (
-              <div 
-                className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground overflow-hidden cursor-text group px-1 py-0.5 rounded-lg hover:bg-muted/10 transition-colors"
-                onClick={() => setIsEditingPath(true)}
-              >
-                <div 
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted transition-colors cursor-pointer"
-                  onClick={(e) => { e.stopPropagation(); handleSetRoot({ id: '.', name: 'Root', type: 'folder', modifiedAt: '' }); }}
-                >
-                  <HardDrive className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                  <span className="shrink-0 font-bold text-foreground">Root</span>
-                </div>
-                {rootBreadcrumbs.map((node, i) => (
-                  <div 
-                    key={node.id} 
-                    className={cn(
-                      "flex items-center gap-1.5 shrink-0 px-1.5 py-0.5 rounded transition-colors",
-                      dragOverId === node.id && "bg-primary/20 ring-1 ring-primary/30"
-                    )}
-                    onDragOver={(e) => handleDragOver(e, node)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, node)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSetRoot(node);
-                    }}
-                  >
-                    <ChevronRight className="h-3 w-3 opacity-30 shrink-0" />
-                    <Folder className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                    <span 
-                      className={cn(
-                        "truncate max-w-[120px] cursor-pointer hover:text-foreground",
-                        i === rootBreadcrumbs.length - 1 ? "text-foreground font-bold border-b-2 border-primary/50" : "text-muted-foreground"
-                      )}
-                    >
-                      {node.name || 'Root'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0 uppercase font-black text-[9px] tracking-widest text-muted-foreground/70">
-            <span className="mr-0.5">Sort:</span>
-            <Button
-              variant={sortConfig.key === 'name' ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-7 text-[9px] px-2.5 font-bold bg-white border border-slate-200 shadow-sm"
-              onClick={() => setSortConfig(s => ({ key: 'name', direction: s.key === 'name' && s.direction === 'asc' ? 'desc' : 'asc' }))}
-            >
-              Name {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-            </Button>
-            <Button
-              variant={sortConfig.key === 'modifiedAt' ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-7 text-[9px] px-2.5 font-bold bg-white border border-slate-200 shadow-sm"
-              onClick={() => setSortConfig(s => ({ key: 'modifiedAt', direction: s.key === 'modifiedAt' && s.direction === 'asc' ? 'desc' : 'asc' }))}
-            >
-              Data
-            </Button>
-            <Button
-              variant={sortConfig.key === 'size' ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-7 text-[9px] px-2.5 font-bold bg-white border border-slate-200 shadow-sm"
-              onClick={() => setSortConfig(s => ({ key: 'size', direction: s.key === 'size' && s.direction === 'asc' ? 'desc' : 'asc' }))}
-            >
-              Size
-            </Button>
-            <Separator orientation="vertical" className="h-4 mx-0.5" />
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn("h-7 w-7", !showDetailPane && "text-primary bg-primary/10")}
-              onClick={() => setShowDetailPane(prev => !prev)}
-            >
-              {showDetailPane ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
-            </Button>
-          </div>
-        </div>
+        {/* Invisible trigger area just below header */}
+        <div className="absolute top-0 w-full h-3 bg-transparent z-20 cursor-row-resize" title="Hover to view Bookmarks" />
       </div>
 
       <div className="flex-1 flex overflow-hidden min-h-0 relative">
@@ -1768,126 +1747,102 @@ export default function App() {
                     </div>
 
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-0 bg-white">
-                      <div className="flex flex-col lg:flex-row h-full">
+                      <div className="flex flex-col h-full">
                         {/* Visual Preview / Main Detail Component */}
-                        <div className="flex-1 min-w-0 border-r flex flex-col items-start p-8">
+                        <div className="flex-1 min-h-[50%] border-b flex flex-col items-start p-6 bg-slate-50/50">
                            <div className="w-full flex-1 flex flex-col min-h-0">
                              {(selectedNode || openedNode!).imageUrl ? (
-                               <div className="flex-1 flex items-center justify-center bg-black/5 rounded-xl overflow-hidden border">
+                               <div className="flex-1 flex items-center justify-center bg-black/5 rounded-xl overflow-hidden shadow-inner p-2">
                                  <img 
                                    src={(selectedNode || openedNode!).imageUrl} 
                                    alt={(selectedNode || openedNode!).name}
-                                   className="max-w-full max-h-full object-contain shadow-2xl"
+                                   className="max-w-full max-h-full object-contain rounded"
                                    referrerPolicy="no-referrer"
                                  />
                                </div>
                              ) : (selectedNode || openedNode!).content ? (
-                               <div className="p-6 font-mono text-sm leading-relaxed overflow-x-auto whitespace-pre-wrap bg-muted/5 flex-1 border rounded-xl">
+                               <div className="p-4 font-mono text-[11px] leading-relaxed overflow-x-auto whitespace-pre-wrap flex-1 border shadow-sm rounded-xl bg-white text-foreground/80">
                                   {(selectedNode || openedNode!).content}
                                </div>
                              ) : (
-                               <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground gap-4 border border-dashed rounded-xl">
-                                 <div className="w-24 h-24 rounded-2xl bg-muted/50 flex items-center justify-center">
-                                   <FileIcon type={(selectedNode || openedNode!).type} className="h-12 w-12 opacity-30" />
+                               <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground gap-3 border border-dashed rounded-xl bg-white/50">
+                                 <div className="w-16 h-16 rounded-2xl bg-muted/30 flex items-center justify-center">
+                                   <FileIcon type={(selectedNode || openedNode!).type} className="h-8 w-8 opacity-40" />
                                  </div>
-                                 <div className="space-y-1">
-                                   <p className="font-semibold text-foreground/60 caps tracking-widest text-[10px]">No Content Preview Available</p>
-                                   <p className="text-xs">{(selectedNode || openedNode!).type.toUpperCase()} file</p>
+                                 <div className="space-y-0.5">
+                                   <p className="font-semibold text-foreground/60 uppercase tracking-widest text-[9px]">No Preview Available</p>
+                                   <p className="text-[10px]">{(selectedNode || openedNode!).type.toUpperCase()} file</p>
                                  </div>
                                </div>
                              )}
                            </div>
-
-                           {/* Contextual Actions - Left Aligned Stack */}
-                           <div className="mt-8 flex flex-col gap-3 w-48">
-                              <Button className="gap-2 bg-black hover:bg-black/90 text-white rounded-lg h-10 w-full justify-start px-4">
-                                <ExternalLink className="h-4 w-4" /> Open In System
-                              </Button>
-                              <Button 
-                                variant="outline" 
-                                className={cn(
-                                  "gap-2 rounded-lg h-10 w-full justify-start px-4 transition-all",
-                                  pathCopied && "border-green-500 text-green-600 bg-green-50"
-                                )}
-                                onClick={() => handleCopyPath(openedNode || selectedNode!)}
-                              >
-                                {pathCopied ? (
-                                  <>
-                                    <div className="h-4 w-4 rounded-full bg-green-500 flex items-center justify-center">
-                                      <svg className="h-2 w-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M5 13l4 4L19 7" />
-                                      </svg>
-                                    </div>
-                                    Path Copied!
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="h-4 w-4" /> Copy Path
-                                  </>
-                                )}
-                              </Button>
-                              <div className="flex items-center gap-4 mt-2 px-2">
-                                 <Button variant="ghost" size="icon" title="Properties" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button>
-                                 <Button 
-                                   variant="ghost" 
-                                   size="icon" 
-                                   title="Delete" 
-                                   className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                                   onClick={() => (selectedNode || openedNode) && handleDelete((selectedNode || openedNode)!)}
-                                 >
-                                   <Trash2 className="h-4 w-4" />
-                                 </Button>
-                              </div>
-                           </div>
                         </div>
 
-                        {/* Meta Sidebar (Technical Info) */}
-                        <div className="w-full lg:w-[400px] shrink-0 flex flex-col bg-white border-l">
-                          <div className="p-8 space-y-10">
-                            {/* Technical Specs */}
-                            <div className="space-y-5">
-                              <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.25em] flex items-center gap-2">
-                                 Technical Specs
-                              </h3>
-                              <div className="space-y-4 text-xs font-medium">
-                                <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                  <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Type</span>
-                                  <Badge variant="secondary" className="uppercase text-[9px] h-5 font-bold tracking-widest px-2">{(selectedNode || openedNode)?.type || '---'}</Badge>
-                                </div>
-                                <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                  <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Size</span>
-                                  <span className="font-mono font-bold text-foreground">{(selectedNode || openedNode)?.size || '---'}</span>
-                                </div>
-                                <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                  <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Created</span>
-                                  <span className="font-mono opacity-60">2024-03-24</span>
-                                </div>
-                                <div className="flex justify-between items-center py-2 border-b border-dashed">
-                                  <span className="text-muted-foreground uppercase tracking-tight text-[10px]">Modified</span>
-                                  <span className="font-mono opacity-60">{(selectedNode || openedNode)?.modifiedAt || '----'}</span>
-                                </div>
-                              </div>
+                        {/* Meta Sidebar (Technical Info & Actions) */}
+                        <div className="w-full shrink-0 flex flex-col bg-white">
+                          <div className="p-6 space-y-6">
+                            
+                            {/* Actions Component */}
+                            <div className="flex gap-2">
+                               <Button className="flex-1 gap-1.5 bg-black hover:bg-black/90 text-white rounded-lg h-9 text-xs font-semibold" onClick={() => {
+                                 const n = openedNode || selectedNode!;
+                                 if (n.type === 'folder') handleOpenNode(n); else handleOpenInSystem(n);
+                               }}>
+                                 <ExternalLink className="h-3.5 w-3.5" /> Open
+                               </Button>
+                               <Button 
+                                 variant={pathCopied ? "default" : "outline"}
+                                 className={cn("flex-1 gap-1.5 rounded-lg h-9 text-xs transition-all font-semibold", pathCopied && "bg-green-500 hover:bg-green-600 text-white border-green-500")}
+                                 onClick={() => handleCopyPath(openedNode || selectedNode!)}
+                               >
+                                 <Copy className="h-3.5 w-3.5" /> 
+                                 {pathCopied ? "Copied!" : "Copy Path"}
+                               </Button>
+                               <Button 
+                                 variant="outline" 
+                                 size="icon" 
+                                 className="h-9 w-9 text-red-500 hover:bg-red-50"
+                                 onClick={() => (selectedNode || openedNode) && handleDelete((selectedNode || openedNode)!)}
+                               >
+                                 <Trash2 className="h-4 w-4" />
+                               </Button>
+                               <Button variant="outline" size="icon" className="h-9 w-9"><MoreHorizontal className="h-4 w-4" /></Button>
                             </div>
 
-                            {/* Access Control */}
-                            <div className="space-y-5">
-                              <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.25em]">Access Control</h3>
-                              <div className="flex items-center gap-3">
-                                <div className="flex -space-x-2">
-                                  <div className="h-8 w-8 rounded-full bg-[#3b82f6] border-2 border-white flex items-center justify-center text-[10px] text-white font-bold shadow-sm">JD</div>
-                                  <div className="h-8 w-8 rounded-full bg-[#10b981] border-2 border-white flex items-center justify-center text-[10px] text-white font-bold shadow-sm">AS</div>
-                                  <div className="h-8 w-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] text-slate-400 font-bold shadow-sm">+3</div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                              {/* Technical Specs */}
+                              <div className="space-y-3">
+                                <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.25em] flex items-center gap-2 border-b pb-2">
+                                   Technical Specs
+                                </h3>
+                                <div className="space-y-2 text-[11px] font-medium">
+                                  <div className="flex justify-between items-center py-1">
+                                    <span className="text-muted-foreground">Type</span>
+                                    <Badge variant="secondary" className="text-[9px] uppercase tracking-wider font-bold rounded-sm h-5 px-1.5 bg-muted/50">
+                                      {(selectedNode || openedNode!).type}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex justify-between items-center py-1 border-t border-dotted border-border/60">
+                                    <span className="text-muted-foreground">Size</span>
+                                    <span className="font-mono">{(selectedNode || openedNode!).size || '---'}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center py-1 border-t border-dotted border-border/60">
+                                    <span className="text-muted-foreground">Modified</span>
+                                    <span className="font-mono">{(selectedNode || openedNode!).modifiedAt || '----'}</span>
+                                  </div>
                                 </div>
-                                <span className="text-[10px] font-semibold text-muted-foreground">5 users with access</span>
                               </div>
-                              <Button variant="outline" size="sm" className="w-full text-[10px] h-9 uppercase tracking-[0.1em] font-bold shadow-sm">Manage Access</Button>
-                            </div>
-
-                            {/* Full Path */}
-                            <div className="space-y-5">
-                              <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.25em]">Full Path</h3>
-                               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-[11px] font-mono break-all leading-relaxed shadow-inner">
-                                /app/applet/{(selectedNode || openedNode)?.name || ''}
+                              
+                              <div className="space-y-3">
+                                <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.25em] flex items-center gap-2 border-b pb-2">
+                                   Details
+                                </h3>
+                                <div className="space-y-2 flex flex-col">
+                                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold">Full Path</p>
+                                  <div className="p-2.5 rounded-md bg-muted/20 border border-border/50 font-mono text-[10px] text-foreground break-all leading-relaxed shadow-inner">
+                                    {(selectedNode || openedNode!).id}
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </div>

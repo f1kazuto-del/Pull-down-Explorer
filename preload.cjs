@@ -12,5 +12,8 @@ contextBridge.exposeInMainWorld('electron', {
   },
   openWithProgram: (filePath, programPath) => {
     return ipcRenderer.invoke('open-with-program', filePath, programPath);
+  },
+  copyToClipboard: (text) => {
+    ipcRenderer.send('copy-to-clipboard', text);
   }
 });

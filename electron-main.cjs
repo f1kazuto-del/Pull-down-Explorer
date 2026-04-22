@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, nativeImage, clipboard } = require('electron');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
 const fs = require('fs');
@@ -186,6 +186,11 @@ app.on('ready', () => {
     } catch (e) {
       return { success: false, error: e.message };
     }
+  });
+
+  // Handle clipboard copy
+  ipcMain.on('copy-to-clipboard', (event, text) => {
+    clipboard.writeText(text);
   });
 
   // Handle User Selecting a Custom Program (.exe)

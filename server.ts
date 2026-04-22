@@ -15,6 +15,35 @@ const getDirname = () => {
 const currentDir = getDirname();
 
 import AdminZip from "adm-zip";
+import { exec } from "child_process";
+import { promisify } from "util";
+const execAsync = promisify(exec);
+
+async function getAvailableDrives(): Promise<{ id: string, name: string, type: string, isLoaded: boolean, isDrive: boolean }[]> {
+  const drives: any[] = [];
+  
+  if (process.platform === 'win32') {
+    try {
+      const { stdout } = await execAsync('wmic logicaldisk get caption');
+      const lines = stdout.split('\n').map(l => l.trim()).filter(l => l && l !== 'Caption' && l.endsWith(':'));
+      for (const drive of lines) {
+        drives.push({
+          id: drive + '\\',
+          name: `Local Disk (${drive})`,
+          type: "folder",
+          isLoaded: false,
+          isDrive: true
+        });
+      }
+    } catch (e) {
+      // Fallback
+      drives.push({ id: "C:\\", name: "Windows (C:)", type: "folder", isLoaded: false, isDrive: true });
+    }
+  } else {
+    drives.push({ id: "/", name: "Root (/)", type: "folder", isLoaded: false, isDrive: true });
+  }
+  return drives;
+}
 
 async function startServer() {
   const app = express();
@@ -43,16 +72,14 @@ async function startServer() {
 
       // Virtual "PC" view
       if (targetPath === "PC" || targetPath === "InternalHome") {
+        const drives = await getAvailableDrives();
         return res.json({
           id: targetPath,
           name: targetPath === "PC" ? "PC" : "Home",
           type: "folder",
           isLoaded: true,
           isPCView: true,
-          children: [
-            { id: "C:", name: "Windows (C:)", type: "folder", size: "457.2 GB", totalSize: "905.1 GB", usage: 50, isDrive: true, modifiedAt: "2026-04-18" },
-            { id: "/", name: "Root (/)", type: "folder", size: "200.5 GB", totalSize: "500.0 GB", usage: 40, isDrive: true, modifiedAt: "2026-04-18" }
-          ]
+          children: drives
         });
       }
 
