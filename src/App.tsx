@@ -1440,6 +1440,25 @@ export default function App() {
           <Button variant="ghost" size="sm" className={cn("h-8 px-2 gap-1.5 text-[11px]", viewNodeId === 'Desktop' && "bg-primary/10 text-primary")} onClick={() => handleSetRoot({ id: 'Desktop', name: 'Desktop', type: 'folder', modifiedAt: '' })}>
             <LayoutTemplate className="h-3.5 w-3.5" /> <span className="font-bold hidden md:inline">Desktop</span>
           </Button>
+          <Separator orientation="vertical" className="h-5 mx-1 hidden xl:block" />
+          
+          {/* Inline Bookmarks */}
+          <div className="hidden xl:flex items-center gap-1 overflow-hidden max-w-[300px]">
+             {bookmarks.map(b => (
+               <div key={b.node.id} className="flex items-center shrink-0">
+                 {renamingBookmarkId === b.node.id ? (
+                   <form onSubmit={(e) => { e.preventDefault(); updateBookmarkAlias(b.node.id, renamingBookmarkName); }}>
+                     <Input autoFocus className="h-7 py-0 px-2 text-[10px] w-24 bg-muted/20" value={renamingBookmarkName} onChange={(e) => setRenamingBookmarkName(e.target.value)} onBlur={() => updateBookmarkAlias(b.node.id, renamingBookmarkName)} />
+                   </form>
+                 ) : (
+                   <Button variant="ghost" size="sm" className={cn("h-8 px-2 text-[11px] gap-1.5 hover:bg-muted", viewNodeId === b.node.id && "bg-primary/10 text-primary")} onClick={() => handleSetRoot(b.node)} onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, node: b.node }); }}>
+                     <Star className="h-3.5 w-3.5 text-yellow-500 opacity-80" />
+                     <span className="truncate max-w-[80px]">{b.alias || b.node.name}</span>
+                   </Button>
+                 )}
+               </div>
+             ))}
+          </div>
         </div>
 
         {/* Address Bar / Breadcrumbs */}
@@ -1555,53 +1574,6 @@ export default function App() {
           </Button>
         </div>
       </header>
-
-      {/* Bookmarks Bar - Interactive Hover Area */}
-      <div className="relative z-10 w-full group shrink-0 h-0">
-        <div className="absolute top-0 w-full h-8 px-4 flex items-center gap-3 bg-white border-b shadow-sm transition-transform duration-200 transform -translate-y-full group-hover:translate-y-0 opacity-0 group-hover:opacity-100 overflow-x-auto scrollbar-hide">
-          <Star className="h-3 w-3 text-yellow-500 shrink-0" />
-          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest shrink-0">Bookmarks</span>
-          <Separator orientation="vertical" className="h-4 mx-1" />
-          {bookmarks.length === 0 && <span className="text-[10px] text-muted-foreground opacity-60">No bookmarks saved</span>}
-          {bookmarks.map(b => (
-            <div key={b.node.id} className="flex items-center gap-0.5 shrink-0">
-              {renamingBookmarkId === b.node.id ? (
-                <form 
-                  onSubmit={(e) => { e.preventDefault(); updateBookmarkAlias(b.node.id, renamingBookmarkName); }}
-                  className="flex items-center"
-                >
-                  <Input 
-                    autoFocus
-                    className="h-6 py-0 px-2 text-[10px] w-24 bg-muted/20"
-                    value={renamingBookmarkName}
-                    onChange={(e) => setRenamingBookmarkName(e.target.value)}
-                    onBlur={() => updateBookmarkAlias(b.node.id, renamingBookmarkName)}
-                  />
-                </form>
-              ) : (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className={cn(
-                    "h-6 px-2 text-[10px] gap-1.5 hover:bg-muted font-medium",
-                    viewNodeId === b.node.id && "bg-primary/10 text-primary"
-                  )}
-                  onClick={() => handleSetRoot(b.node)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setContextMenu({ x: e.clientX, y: e.clientY, node: b.node });
-                  }}
-                >
-                  <Folder className="h-3 w-3 opacity-70" />
-                  {b.alias || b.node.name}
-                </Button>
-              )}
-            </div>
-          ))}
-        </div>
-        {/* Invisible trigger area just below header */}
-        <div className="absolute top-0 w-full h-3 bg-transparent z-20 cursor-row-resize" title="Hover to view Bookmarks" />
-      </div>
 
       <div className="flex-1 flex overflow-hidden min-h-0 relative">
         {/* Main Area (Center) */}

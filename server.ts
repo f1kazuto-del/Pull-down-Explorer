@@ -108,13 +108,28 @@ async function startServer() {
           id: fullPath,
           name: entry.name,
           type,
-          size: "", // Lazy load
-          modifiedAt: "----", // Lazy load
+          size: "", // Lazy load - will fix in map
+          modifiedAt: "----", // Lazy load - will fix in map
           children: isDirectory ? [] : undefined,
           isLoaded: false,
           hasChildren: isDirectory 
         };
       });
+
+      // Quick fetch size and date for the first N entries to avoid - display
+      const statPromises = files.map(async (f) => {
+        try {
+           const stat = await fs.stat(f.id);
+           if (!f.hasChildren) {
+             f.size = formatBytes(stat.size);
+           }
+           f.modifiedAt = stat.mtime.toISOString().split('T')[0];
+        } catch(e) {
+           // Ignore
+        }
+        return f;
+      });
+      await Promise.all(statPromises);
 
       res.json({
         id: targetPath,
