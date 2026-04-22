@@ -484,8 +484,22 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sidebarWidth, setSidebarWidth] = useState(500);
   const [isResizing, setIsResizing] = useState(false);
-  const [bookmarks, setBookmarks] = useState<{ node: FileNode; alias?: string }[]>([]);
-  const [recentFolders, setRecentFolders] = useState<FileNode[]>([]);
+  const [bookmarks, setBookmarks] = useState<{ node: FileNode; alias?: string }[]>(() => {
+    try {
+      const saved = localStorage.getItem('explorer-bookmarks-v2');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [recentFolders, setRecentFolders] = useState<FileNode[]>(() => {
+    try {
+      const saved = localStorage.getItem('explorer-recent-folders');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [showDebug, setShowDebug] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
   const [openedNode, setOpenedNode] = useState<FileNode | null>(null);
@@ -601,26 +615,6 @@ export default function App() {
       setIsResizing(false);
     };
     const handleClickOutside = () => setContextMenu(null);
-
-    // Persistence for bookmarks
-    const savedBookmarks = localStorage.getItem('explorer-bookmarks-v2');
-    if (savedBookmarks) {
-      try {
-        setBookmarks(JSON.parse(savedBookmarks));
-      } catch (e) {
-        console.error('Failed to load bookmarks', e);
-      }
-    }
-
-    // Persistence for recent folders
-    const savedRecent = localStorage.getItem('explorer-recent-folders');
-    if (savedRecent) {
-      try {
-        setRecentFolders(JSON.parse(savedRecent));
-      } catch (e) {
-        console.error('Failed to load recent folders', e);
-      }
-    }
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
@@ -1440,10 +1434,30 @@ export default function App() {
           <Button variant="ghost" size="sm" className={cn("h-8 px-2 gap-1.5 text-[11px]", viewNodeId === 'Desktop' && "bg-primary/10 text-primary")} onClick={() => handleSetRoot({ id: 'Desktop', name: 'Desktop', type: 'folder', modifiedAt: '' })}>
             <LayoutTemplate className="h-3.5 w-3.5" /> <span className="font-bold hidden md:inline">Desktop</span>
           </Button>
-          <Separator orientation="vertical" className="h-5 mx-1 hidden xl:block" />
+          <Separator orientation="vertical" className="h-5 mx-1" />
           
           {/* Inline Bookmarks */}
-          <div className="hidden xl:flex items-center gap-1 overflow-hidden max-w-[300px]">
+          <div 
+            className={cn(
+              "flex items-center gap-1 overflow-x-auto scrollbar-hide max-w-[300px] border border-transparent rounded px-1 transition-colors",
+              dragOverId === 'bookmarks-bar' && "bg-primary/10 border-primary/50"
+            )}
+            onDragOver={(e) => { e.preventDefault(); handleDragOver(e, { id: 'bookmarks-bar', name: '', type: 'folder', modifiedAt: '' }); }}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => {
+              e.preventDefault();
+              handleDragLeave();
+              try {
+                const data = JSON.parse(e.dataTransfer.getData('application/json'));
+                if (data && data.id) {
+                  addBookmark({ id: data.id, name: data.id.split(/[/\\]/).pop(), type: data.type, modifiedAt: '' });
+                }
+              } catch (err) {}
+            }}
+          >
+             {bookmarks.length === 0 && (
+               <span className="text-[10px] text-muted-foreground opacity-60 whitespace-nowrap px-1">No bookmarks</span>
+             )}
              {bookmarks.map(b => (
                <div key={b.node.id} className="flex items-center shrink-0">
                  {renamingBookmarkId === b.node.id ? (
@@ -1451,7 +1465,7 @@ export default function App() {
                      <Input autoFocus className="h-7 py-0 px-2 text-[10px] w-24 bg-muted/20" value={renamingBookmarkName} onChange={(e) => setRenamingBookmarkName(e.target.value)} onBlur={() => updateBookmarkAlias(b.node.id, renamingBookmarkName)} />
                    </form>
                  ) : (
-                   <Button variant="ghost" size="sm" className={cn("h-8 px-2 text-[11px] gap-1.5 hover:bg-muted", viewNodeId === b.node.id && "bg-primary/10 text-primary")} onClick={() => handleSetRoot(b.node)} onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, node: b.node }); }}>
+                   <Button variant="ghost" size="sm" className={cn("h-8 px-2 text-[11px] gap-1 hover:bg-muted", viewNodeId === b.node.id && "bg-primary/10 text-primary")} onClick={() => handleSetRoot(b.node)} onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, node: b.node }); }}>
                      <Star className="h-3.5 w-3.5 text-yellow-500 opacity-80" />
                      <span className="truncate max-w-[80px]">{b.alias || b.node.name}</span>
                    </Button>
