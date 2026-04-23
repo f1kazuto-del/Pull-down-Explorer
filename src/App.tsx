@@ -505,6 +505,7 @@ export default function App() {
   const [openedNode, setOpenedNode] = useState<FileNode | null>(null);
   const [draggedNode, setDraggedNode] = useState<FileNode | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [longTask, setLongTask] = useState<{ active: boolean; message: string } | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [showDetailPane, setShowDetailPane] = useState(true);
   const [pathCopied, setPathCopied] = useState(false);
@@ -837,7 +838,7 @@ export default function App() {
   };
 
   const handleExtract = async (node: FileNode) => {
-    setLoading(true);
+    setLongTask({ active: true, message: `Extracting ${node.name}...` });
     try {
       const res = await fetch('/api/extract', {
         method: 'POST',
@@ -845,12 +846,48 @@ export default function App() {
         body: JSON.stringify({ path: node.id })
       });
       if (res.ok) {
+        await new Promise(r => setTimeout(r, 200));
         await handleRefresh();
+      } else {
+        const errorData = await res.json();
+        alert(`Extraction failed: ${errorData.error}`);
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      alert(`Extraction failed: ${err.message}`);
     } finally {
-      setLoading(false);
+      setLongTask(null);
+    }
+    setContextMenu(null);
+  };
+
+  const handleCompress = async (targetNode?: FileNode) => {
+    const isSelected = targetNode ? selectedIds.has(targetNode.id) : selectedIds.size > 0;
+    const targets = isSelected ? Array.from(selectedIds) : (targetNode ? [targetNode.id] : []);
+    
+    if (targets.length === 0) return;
+    
+    const targetNames = isSelected 
+      ? `${selectedIds.size} items` 
+      : (targetNode?.name || '');
+
+    setLongTask({ active: true, message: `Compressing ${targetNames}...` });
+    try {
+      const res = await fetch('/api/compress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paths: targets })
+      });
+      if (res.ok) {
+        await new Promise(r => setTimeout(r, 200));
+        await handleRefresh();
+      } else {
+        const errorData = await res.json();
+        alert(`Compression failed: ${errorData.error}`);
+      }
+    } catch (err: any) {
+      alert(`Compression failed: ${err.message}`);
+    } finally {
+      setLongTask(null);
     }
     setContextMenu(null);
   };
@@ -1229,6 +1266,7 @@ export default function App() {
 
     if (!confirm(`Are you sure you want to delete ${targetNames}?`)) return;
     
+    setLongTask({ active: true, message: `Deleting ${targetNames}...` });
     try {
       const res = await fetch('/api/delete', {
         method: 'POST',
@@ -1246,11 +1284,16 @@ export default function App() {
           }
         });
         setSelectedIds(next);
+        
+        // Brief delay before refresh ensures file system locks are released 
+        // and FS events have settled (makes view reflection more reliable).
+        await new Promise(r => setTimeout(r, 200));
         await handleRefresh();
       }
     } catch (err) {
       console.error(err);
     }
+    setLongTask(null);
     setContextMenu(null);
   };
 
@@ -1960,13 +2003,21 @@ export default function App() {
               </button>
             )}
 
-            {contextMenu.node?.name.toLowerCase().endsWith('.zip') && (
+            {contextMenu.node?.name.toLowerCase().endsWith('.zip') ? (
               <button 
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
                 onClick={() => handleExtract(contextMenu.node!)}
               >
                 <Archive className="h-4 w-4" />
                 <span>Extract Here</span>
+              </button>
+            ) : (
+              <button 
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+                onClick={() => handleCompress(contextMenu.node!)}
+              >
+                <Archive className="h-4 w-4" />
+                <span>Compress to ZIP</span>
               </button>
             )}
 
@@ -2080,6 +2131,33 @@ export default function App() {
               <Trash2 className="h-4 w-4" />
               <span>Remove Bookmark</span>
             </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Task Progress Toast */}
+      <AnimatePresence>
+        {longTask && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-6 right-6 z-50 bg-background border shadow-xl shadow-black/10 rounded-xl p-4 flex items-center gap-4 min-w-[280px]"
+          >
+            <div className="p-2 bg-primary/10 rounded-full">
+               <RefreshCw className="h-5 w-5 text-primary animate-spin" />
+            </div>
+            <div className="flex-1 min-w-0">
+               <h4 className="text-sm font-semibold truncate leading-tight">{longTask.message}</h4>
+               <div className="h-1 bg-muted rounded-full mt-2.5 overflow-hidden w-full relative">
+                  <motion.div 
+                    initial={{ left: '-50%', width: '30%' }}
+                    animate={{ left: '100%' }}
+                    transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
+                    className="absolute top-0 bottom-0 bg-primary rounded-full shadow-[0_0_8px_rgba(var(--primary),0.8)]" 
+                  />
+               </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

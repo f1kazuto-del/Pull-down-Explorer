@@ -305,10 +305,59 @@ async function startServer() {
         counter++;
       }
 
-      const zip = new AdminZip(zipPath);
-      zip.extractAllTo(extractPath, true);
+      await new Promise<void>((resolve, reject) => {
+        const zip = new AdminZip(zipPath);
+        zip.extractAllToAsync(extractPath, true, false, (error: any) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
       
       res.json({ success: true, path: extractPath });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API to compress into ZIP
+  app.post("/api/compress", async (req, res) => {
+    try {
+      const { paths, destinationPath } = req.body;
+      if (!paths || !paths.length) return res.status(400).json({ error: "Paths are required" });
+
+      const parentDir = destinationPath || path.dirname(paths[0]);
+      let defaultName = paths.length === 1 ? `${path.basename(paths[0])}.zip` : "Archive.zip";
+      let zipPath = path.join(parentDir, defaultName);
+
+      // Handle exists conflict
+      let counter = 1;
+      while (await fileExists(zipPath)) {
+        const baseName = path.basename(defaultName, '.zip');
+        zipPath = path.join(parentDir, `${baseName} (${counter}).zip`);
+        counter++;
+      }
+
+      await new Promise<void>(async (resolve, reject) => {
+        try {
+          const zip = new AdminZip();
+          for (const p of paths) {
+            const stats = await fs.stat(p);
+            if (stats.isDirectory()) {
+              zip.addLocalFolder(p, path.basename(p));
+            } else {
+              zip.addLocalFile(p);
+            }
+          }
+          zip.writeZip(zipPath, (error: any) => {
+            if (error) reject(error);
+            else resolve();
+          });
+        } catch (e) {
+          reject(e);
+        }
+      });
+      
+      res.json({ success: true, path: zipPath });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
