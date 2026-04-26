@@ -510,7 +510,7 @@ export default function App() {
   const [openedNode, setOpenedNode] = useState<FileNode | null>(null);
   const [draggedNode, setDraggedNode] = useState<FileNode | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
-  const [longTask, setLongTask] = useState<{ active: boolean; message: string } | null>(null);
+  const [longTask, setLongTask] = useState<{ active: boolean; message: string; progress?: number } | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [showDetailPane, setShowDetailPane] = useState(true);
   const [pathCopied, setPathCopied] = useState(false);
@@ -889,23 +889,48 @@ export default function App() {
       ? `${selectedIds.size} items` 
       : (targetNode?.name || '');
 
-    setLongTask({ active: true, message: `Compressing ${targetNames}...` });
+    setLongTask({ active: true, message: `Compressing ${targetNames}...`, progress: 0 });
     try {
       const res = await fetch('/api/compress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paths: targets })
       });
-      if (res.ok) {
-        await new Promise(r => setTimeout(r, 200));
-        await handleRefresh();
-      } else {
-        const errorData = await res.json();
-        alert(`Compression failed: ${errorData.error}`);
+      
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const text = decoder.decode(value);
+        const lines = text.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.substring(6);
+            if (!dataStr) continue;
+            try {
+               const data = JSON.parse(dataStr);
+               if (data.type === 'progress') {
+                 setLongTask(prev => prev ? { ...prev, progress: data.progress } : null);
+               } else if (data.type === 'done') {
+                 await new Promise(r => setTimeout(r, 200));
+                 await handleRefresh();
+                 setLongTask(null);
+               } else if (data.type === 'error') {
+                 alert(`Compression failed: ${data.message || data.error}`);
+                 setLongTask(null);
+               }
+            } catch (e) {
+               console.warn("Could not parse data line", line);
+            }
+          }
+        }
       }
     } catch (err: any) {
       alert(`Compression failed: ${err.message}`);
-    } finally {
       setLongTask(null);
     }
     setContextMenu(null);
@@ -2271,12 +2296,19 @@ export default function App() {
             <div className="flex-1 min-w-0">
                <h4 className="text-sm font-semibold truncate leading-tight">{longTask.message}</h4>
                <div className="h-1 bg-muted rounded-full mt-2.5 overflow-hidden w-full relative">
-                  <motion.div 
-                    initial={{ left: '-50%', width: '30%' }}
-                    animate={{ left: '100%' }}
-                    transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
-                    className="absolute top-0 bottom-0 bg-primary rounded-full shadow-[0_0_8px_rgba(var(--primary),0.8)]" 
-                  />
+                  {longTask.progress !== undefined ? (
+                    <motion.div 
+                      className="absolute top-0 bottom-0 left-0 bg-primary rounded-full shadow-[0_0_8px_rgba(var(--primary),0.8)] transition-all duration-300"
+                      style={{ width: `${longTask.progress}%` }}
+                    />
+                  ) : (
+                    <motion.div 
+                      initial={{ left: '-50%', width: '30%' }}
+                      animate={{ left: '100%' }}
+                      transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
+                      className="absolute top-0 bottom-0 bg-primary rounded-full shadow-[0_0_8px_rgba(var(--primary),0.8)]" 
+                    />
+                  )}
                </div>
             </div>
           </motion.div>

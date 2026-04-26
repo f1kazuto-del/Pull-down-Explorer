@@ -366,11 +366,18 @@ async function startServer() {
     }
   });
 
-  // API to compress into ZIP
+  // API to compress into ZIP using SSE for progress
   app.post("/api/compress", async (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
     try {
       const { paths, destinationPath } = req.body;
-      if (!paths || !paths.length) return res.status(400).json({ error: "Paths are required" });
+      if (!paths || !paths.length) {
+         res.write(`data: ${JSON.stringify({ type: 'error', error: "Paths are required" })}\n\n`);
+         return res.end();
+      }
 
       const parentDir = destinationPath || path.dirname(paths[0]);
       let defaultName = paths.length === 1 ? `${path.basename(paths[0])}.zip` : "Archive.zip";
@@ -384,49 +391,55 @@ async function startServer() {
         counter++;
       }
 
-      await new Promise<void>(async (resolve, reject) => {
-        try {
-          const output = createWriteStream(zipPath);
-          const archive = archiver('zip', {
-            zlib: { level: 9 } // Sets the compression level.
-          });
+      const output = createWriteStream(zipPath);
+      const archive = archiver('zip', {
+        zlib: { level: 9 } // Sets the compression level.
+      });
 
-          output.on('close', function() {
-            resolve();
-          });
+      output.on('close', function() {
+        res.write(`data: ${JSON.stringify({ type: 'done', path: zipPath })}\n\n`);
+        res.end();
+      });
 
-          archive.on('warning', function(err: any) {
-            if (err.code === 'ENOENT') {
-              console.warn(err);
-            } else {
-              reject(err);
-            }
-          });
+      archive.on('progress', function(progress: any) {
+        const total = progress.entries.total;
+        const processed = progress.entries.processed;
+        // fallback to bytes calculation if entries works differently
+        // but typically archiver entries.total updates when adding a directory recursively over time.
+        // It's still a good proxy for overall progress.
+        const percent = total > 0 ? (processed / total) * 100 : 0;
+        res.write(`data: ${JSON.stringify({ type: 'progress', progress: percent })}\n\n`);
+      });
 
-          archive.on('error', function(err: any) {
-            reject(err);
-          });
-
-          archive.pipe(output);
-
-          for (const p of paths) {
-            const stats = await fs.stat(p);
-            if (stats.isDirectory()) {
-              archive.directory(p, path.basename(p));
-            } else {
-              archive.file(p, { name: path.basename(p) });
-            }
-          }
-
-          archive.finalize();
-        } catch (e) {
-          reject(e);
+      archive.on('warning', function(err: any) {
+        if (err.code === 'ENOENT') {
+          console.warn(err);
+        } else {
+          res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
+          res.end();
         }
       });
-      
-      res.json({ success: true, path: zipPath });
+
+      archive.on('error', function(err: any) {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
+        res.end();
+      });
+
+      archive.pipe(output);
+
+      for (const p of paths) {
+        const stats = await fs.stat(p);
+        if (stats.isDirectory()) {
+          archive.directory(p, path.basename(p));
+        } else {
+          archive.file(p, { name: path.basename(p) });
+        }
+      }
+
+      archive.finalize();
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      if (!res.writableEnded) res.end();
     }
   });
 
