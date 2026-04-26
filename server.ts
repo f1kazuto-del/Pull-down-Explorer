@@ -15,6 +15,8 @@ const getDirname = () => {
 const currentDir = getDirname();
 
 import AdminZip from "adm-zip";
+import archiver from "archiver";
+import { createWriteStream } from "fs";
 import { exec } from "child_process";
 import { promisify } from "util";
 const execAsync = promisify(exec);
@@ -384,19 +386,39 @@ async function startServer() {
 
       await new Promise<void>(async (resolve, reject) => {
         try {
-          const zip = new AdminZip();
+          const output = createWriteStream(zipPath);
+          const archive = archiver('zip', {
+            zlib: { level: 9 } // Sets the compression level.
+          });
+
+          output.on('close', function() {
+            resolve();
+          });
+
+          archive.on('warning', function(err: any) {
+            if (err.code === 'ENOENT') {
+              console.warn(err);
+            } else {
+              reject(err);
+            }
+          });
+
+          archive.on('error', function(err: any) {
+            reject(err);
+          });
+
+          archive.pipe(output);
+
           for (const p of paths) {
             const stats = await fs.stat(p);
             if (stats.isDirectory()) {
-              zip.addLocalFolder(p, path.basename(p));
+              archive.directory(p, path.basename(p));
             } else {
-              zip.addLocalFile(p);
+              archive.file(p, { name: path.basename(p) });
             }
           }
-          zip.writeZip(zipPath, (error: any) => {
-            if (error) reject(error);
-            else resolve();
-          });
+
+          archive.finalize();
         } catch (e) {
           reject(e);
         }
