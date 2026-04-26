@@ -645,7 +645,8 @@ export default function App() {
   // Fetch directory structure
   const fetchDirectory = async (path?: string): Promise<FileNode | null> => {
     try {
-      const url = path ? `/api/files?path=${encodeURIComponent(path)}` : '/api/files';
+      const timestamp = Date.now();
+      const url = path ? `/api/files?path=${encodeURIComponent(path)}&t=${timestamp}` : `/api/files?t=${timestamp}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch directory');
       return await res.json();
@@ -1287,10 +1288,14 @@ export default function App() {
         
         // Brief delay before refresh ensures file system locks are released 
         // and FS events have settled (makes view reflection more reliable).
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise(r => setTimeout(r, 400));
         await handleRefresh();
+      } else {
+        const errData = await res.json().catch(() => ({ error: 'Unknown server error' }));
+        alert(`Delete failed: ${errData.error}`);
       }
-    } catch (err) {
+    } catch (err: any) {
+      alert(`Delete failed: ${err.message}`);
       console.error(err);
     }
     setLongTask(null);
