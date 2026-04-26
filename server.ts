@@ -268,21 +268,41 @@ async function startServer() {
       const { parentPath } = req.body;
       if (!parentPath) return res.status(400).json({ error: "Parent path is required" });
       
-      const now = new Date();
-      const dateStr = `${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}_${String(now.getDate()).padStart(2, '0')}`;
-      
-      let folderName = dateStr;
+      let folderName = "New folder";
       let targetPath = path.join(parentPath, folderName);
       
       let counter = 1;
       while (await fileExists(targetPath)) {
-        folderName = `${dateStr} (${counter})`;
+        folderName = `New folder (${counter})`;
         targetPath = path.join(parentPath, folderName);
         counter++;
       }
 
       await fs.mkdir(targetPath);
       res.json({ success: true, name: folderName, path: targetPath });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API to create new file
+  app.post("/api/new-file", async (req, res) => {
+    try {
+      const { parentPath } = req.body;
+      if (!parentPath) return res.status(400).json({ error: "Parent path is required" });
+      
+      let fileName = "New Text Document.txt";
+      let targetPath = path.join(parentPath, fileName);
+      
+      let counter = 1;
+      while (await fileExists(targetPath)) {
+        fileName = `New Text Document (${counter}).txt`;
+        targetPath = path.join(parentPath, fileName);
+        counter++;
+      }
+
+      await fs.writeFile(targetPath, "");
+      res.json({ success: true, name: fileName, path: targetPath });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

@@ -38,6 +38,7 @@ import {
   MousePointer2,
   Download,
   Type,
+  FilePlus,
   PanelRightClose,
   PanelRightOpen,
   Maximize2,
@@ -1324,13 +1325,37 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        // Ensure Desktop exists if we just navigated to it
         // Auto expand parent
         setExpandedIds(prev => new Set([...prev, parentPath]));
         await handleRefresh();
         // Focus new folder
         if (data.path) {
           setSelectedIds(new Set([data.path]));
+          setRenamingId(data.path);
+          setRenamingName(data.name);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setContextMenu(null);
+  };
+
+  const handleCreateFile = async (parentPath: string) => {
+    try {
+      const res = await fetch('/api/new-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentPath })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setExpandedIds(prev => new Set([...prev, parentPath]));
+        await handleRefresh();
+        if (data.path) {
+          setSelectedIds(new Set([data.path]));
+          setRenamingId(data.path);
+          setRenamingName(data.name);
         }
       }
     } catch (err) {
@@ -2099,6 +2124,16 @@ export default function App() {
             >
               <Plus className="h-4 w-4" />
               <span>New Folder</span>
+            </button>
+            <button 
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+              onClick={() => {
+                const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
+                handleCreateFile(target);
+              }}
+            >
+              <FilePlus className="h-4 w-4" />
+              <span>New File</span>
             </button>
             <button 
               className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
