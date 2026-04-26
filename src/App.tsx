@@ -838,15 +838,26 @@ export default function App() {
     }
   };
 
-  const handleExtract = async (node: FileNode) => {
+  const handleExtract = async (node: FileNode, mode?: 'overwrite' | 'rename') => {
     setLongTask({ active: true, message: `Extracting ${node.name}...` });
     try {
       const res = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: node.id })
+        body: JSON.stringify({ path: node.id, mode })
       });
       if (res.ok) {
+        const data = await res.json();
+        if (data.conflict) {
+          setLongTask(null); // Clear long task while waiting for user input
+          const basename = node.name.replace(/\.[^/.]+$/, "");
+          if (confirm(`A file or folder named "${basename}" already exists.\nDo you want to overwrite it?\n\n(Click Cancel to skip overwrite)`)) {
+            handleExtract(node, 'overwrite');
+          } else if (confirm(`Do you want to extract as a renamed folder instead?`)) {
+            handleExtract(node, 'rename');
+          }
+          return; // Avoid double clearing of long task in recursion
+        }
         await new Promise(r => setTimeout(r, 200));
         await handleRefresh();
       } else {
@@ -856,7 +867,9 @@ export default function App() {
     } catch (err: any) {
       alert(`Extraction failed: ${err.message}`);
     } finally {
-      setLongTask(null);
+      if (!mode || mode === 'rename' || mode === 'overwrite') {
+        setLongTask(null);
+      }
     }
     setContextMenu(null);
   };

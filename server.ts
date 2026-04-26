@@ -253,7 +253,7 @@ async function startServer() {
       }
 
       for (const p of targets) {
-        await fs.rm(p, { recursive: true, force: true });
+        await fs.rm(p, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
       }
       
       res.json({ success: true });
@@ -291,18 +291,24 @@ async function startServer() {
   // API to extract ZIP
   app.post("/api/extract", async (req, res) => {
     try {
-      const { path: zipPath } = req.body;
+      const { path: zipPath, mode } = req.body;
       if (!zipPath) return res.status(400).json({ error: "Path is required" });
 
       const parentDir = path.dirname(zipPath);
       const fileName = path.basename(zipPath, path.extname(zipPath));
       let extractPath = path.join(parentDir, fileName);
 
-      // Handle exists conflict
-      let counter = 1;
-      while (await fileExists(extractPath)) {
-        extractPath = path.join(parentDir, `${fileName} (${counter})`);
-        counter++;
+      if (!mode && await fileExists(extractPath)) {
+        return res.json({ conflict: true, extractPath });
+      }
+
+      // Handle exists conflict if mode is 'rename'
+      if (mode === 'rename') {
+        let counter = 1;
+        while (await fileExists(extractPath)) {
+          extractPath = path.join(parentDir, `${fileName} (${counter})`);
+          counter++;
+        }
       }
 
       await new Promise<void>((resolve, reject) => {
