@@ -288,20 +288,39 @@ async function startServer() {
   // API to create new file
   app.post("/api/new-file", async (req, res) => {
     try {
-      const { parentPath } = req.body;
+      const { parentPath, fileType } = req.body;
       if (!parentPath) return res.status(400).json({ error: "Parent path is required" });
       
-      let fileName = "New Text Document.txt";
+      let defaultName = "New File";
+      let extension = ".txt";
+      let content: string | Buffer = "";
+
+      switch(fileType) {
+        case 'txt': defaultName = "New Text Document"; extension = ".txt"; break;
+        case 'md': defaultName = "New Markdown File"; extension = ".md"; break;
+        case 'html': defaultName = "New Web Page"; extension = ".html"; content = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<title>New Page</title>\n</head>\n<body>\n\n</body>\n</html>"; break;
+        case 'json': defaultName = "New JSON File"; extension = ".json"; content = "{}"; break;
+        case 'csv': defaultName = "New Spreadsheet"; extension = ".csv"; break;
+        case 'png': 
+          defaultName = "New Image"; 
+          extension = ".png"; 
+          content = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
+          break;
+        default:
+          defaultName = "New Text Document"; extension = ".txt"; break;
+      }
+
+      let fileName = `${defaultName}${extension}`;
       let targetPath = path.join(parentPath, fileName);
       
       let counter = 1;
       while (await fileExists(targetPath)) {
-        fileName = `New Text Document (${counter}).txt`;
+        fileName = `${defaultName} (${counter})${extension}`;
         targetPath = path.join(parentPath, fileName);
         counter++;
       }
 
-      await fs.writeFile(targetPath, "");
+      await fs.writeFile(targetPath, content);
       res.json({ success: true, name: fileName, path: targetPath });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
