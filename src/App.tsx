@@ -2127,78 +2127,80 @@ export default function App() {
                 </div>
                 <ChevronRight className="h-4 w-4" />
               </button>
-              <div className="absolute left-full top-0 hidden group-hover:block ml-0.5 min-w-48 bg-background border shadow-xl rounded-md py-1">
-                <button 
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
-                  onClick={() => {
-                    const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
-                    handleCreateFolder(target);
-                  }}
-                >
-                  <FolderPlus className="h-4 w-4" />
-                  <span>Folder</span>
-                </button>
-                <Separator className="my-1" />
-                <button 
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
-                  onClick={() => {
-                    const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
-                    handleCreateFile(target, 'txt');
-                  }}
-                >
-                  <FileText className="h-4 w-4" />
-                  <span>Text Document (.txt)</span>
-                </button>
-                <button 
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
-                  onClick={() => {
-                    const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
-                    handleCreateFile(target, 'md');
-                  }}
-                >
-                  <File className="h-4 w-4" />
-                  <span>Markdown File (.md)</span>
-                </button>
-                <button 
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
-                  onClick={() => {
-                    const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
-                    handleCreateFile(target, 'csv');
-                  }}
-                >
-                  <Table className="h-4 w-4" />
-                  <span>CSV File (.csv)</span>
-                </button>
-                <button 
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
-                  onClick={() => {
-                    const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
-                    handleCreateFile(target, 'html');
-                  }}
-                >
-                  <Globe className="h-4 w-4" />
-                  <span>HTML Document (.html)</span>
-                </button>
-                <button 
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
-                  onClick={() => {
-                    const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
-                    handleCreateFile(target, 'json');
-                  }}
-                >
-                  <Braces className="h-4 w-4" />
-                  <span>JSON File (.json)</span>
-                </button>
-                <button 
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
-                  onClick={() => {
-                    const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
-                    handleCreateFile(target, 'png');
-                  }}
-                >
-                  <ImageIcon className="h-4 w-4" />
-                  <span>Image (.png)</span>
-                </button>
+              <div className="absolute left-[calc(100%-4px)] bottom-[-140px] hidden group-hover:block pl-2 min-w-48 z-[110]">
+                <div className="bg-background border shadow-xl rounded-md py-1">
+                  <button 
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+                    onClick={() => {
+                      const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
+                      handleCreateFolder(target);
+                    }}
+                  >
+                    <FolderPlus className="h-4 w-4" />
+                    <span>Folder</span>
+                  </button>
+                  <Separator className="my-1" />
+                  <button 
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+                    onClick={() => {
+                      const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
+                      handleCreateFile(target, 'txt');
+                    }}
+                  >
+                    <FileText className="h-4 w-4" />
+                    <span>Text Document (.txt)</span>
+                  </button>
+                  <button 
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+                    onClick={() => {
+                      const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
+                      handleCreateFile(target, 'md');
+                    }}
+                  >
+                    <File className="h-4 w-4" />
+                    <span>Markdown File (.md)</span>
+                  </button>
+                  <button 
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+                    onClick={() => {
+                      const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
+                      handleCreateFile(target, 'csv');
+                    }}
+                  >
+                    <Table className="h-4 w-4" />
+                    <span>CSV File (.csv)</span>
+                  </button>
+                  <button 
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+                    onClick={() => {
+                      const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
+                      handleCreateFile(target, 'html');
+                    }}
+                  >
+                    <Globe className="h-4 w-4" />
+                    <span>HTML Document (.html)</span>
+                  </button>
+                  <button 
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+                    onClick={() => {
+                      const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
+                      handleCreateFile(target, 'json');
+                    }}
+                  >
+                    <Braces className="h-4 w-4" />
+                    <span>JSON File (.json)</span>
+                  </button>
+                  <button 
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted text-left"
+                    onClick={() => {
+                      const target = contextMenu.node && contextMenu.node.type === 'folder' ? contextMenu.node.id : (selectedNode?.id || rootNode.id);
+                      handleCreateFile(target, 'png');
+                    }}
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                    <span>Image (.png)</span>
+                  </button>
+                </div>
               </div>
             </div>
             <button 
